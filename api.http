@@ -1,0 +1,257 @@
+#############################################
+# 1. Usuarios
+#############################################
+
+### Crear usuario paciente
+POST http://localhost:4001/usuarios
+Content-Type: application/json
+
+{
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "telefono": "3001234567",
+  "correo": "juan@example.com",
+  "contrasena": "123456",
+  "rol": "paciente",
+  "numero_documento": "123456789",
+  "direccion": "Calle 123"
+}
+
+### Crear usuario médico
+POST http://localhost:4001/usuarios
+Content-Type: application/json
+
+{
+  "nombre": "Laura",
+  "apellido": "Gómez",
+  "telefono": "3109876543",
+  "correo": "laura@example.com",
+  "contrasena": "654321",
+  "rol": "medico",
+  "numero_documento": "987654321",
+  "direccion": "Carrera 45 #23"
+}
+
+### Listar usuarios
+GET http://localhost:4001/usuarios
+
+### Obtener usuario por id
+GET http://localhost:4001/usuarios/10
+
+### Actualizar usuario
+PUT http://localhost:4001/usuarios/10
+Content-Type: application/json
+
+{
+  "nombre": "Juan Modificado",
+  "apellido": "Pérez",
+  "telefono": "3019998888",
+  "correo": "juan_mod@example.com",
+  "rol": "paciente",
+  "numero_documento": "123456789",
+  "direccion": "Calle 456"
+}
+
+### Eliminar usuario
+DELETE http://localhost:4001/usuarios/6
+
+
+#############################################
+# 2. Médicos
+#############################################
+
+### Listar médicos
+GET http://localhost:4001/medicos
+
+### Obtener médico por id
+GET http://localhost:4001/medicos/4
+
+### Actualizar médico
+PUT http://localhost:4001/medicos/4
+Content-Type: application/json
+
+{
+  "especialidad": "Cardiología",
+  "anios_experiencia": 8,
+  "tarifa": 200.00
+}
+
+### Eliminar médico
+DELETE http://localhost:4001/medicos/2
+
+### Pacientes de un médico
+GET http://localhost:4001/medicos/4/mis-pacientes
+
+### Citas de un médico
+GET http://localhost:4001/medicos/4/mis-citas
+
+
+#############################################
+# 3. Pacientes
+#############################################
+
+### Listar pacientes
+GET http://localhost:4001/pacientes
+
+### Obtener paciente por id
+GET http://localhost:4001/pacientes/1
+
+### Crear paciente manual
+POST http://localhost:4001/pacientes
+Content-Type: application/json
+
+{ "id_usuario": 2 }
+
+
+#############################################
+# 4. Especialidades
+#############################################
+
+### Listar especialidades
+GET http://localhost:4001/especialidades
+
+### Crear especialidad
+POST http://localhost:4001/especialidades
+Content-Type: application/json
+
+{ "nombre": "Dermatología" }
+
+### Asignar especialidad a médico
+POST http://localhost:4001/especialidades/asignar
+Content-Type: application/json
+
+{ "id_medico": 4, "id_especialidad": 1 }
+
+
+#############################################
+# 5. Citas
+#############################################
+
+### Crear cita
+POST http://localhost:4001/citas
+Content-Type: application/json
+
+{
+  "id_paciente": 1,
+  "id_medico": 4,
+  "fecha": "2025-09-25 10:00:00",
+  "id_pago": 1,
+  "link_llamada": "https://videollamada.com/abc123"
+}
+
+### Listar todas las citas
+GET http://localhost:4001/citas
+
+### Obtener cita por id
+GET http://localhost:4001/citas/2
+
+### Actualizar cita
+PUT http://localhost:4001/citas/2
+Content-Type: application/json
+
+{
+  "fecha": "2025-09-26 15:30:00",
+  "id_pago": 1,
+  "link_llamada": "https://videollamada.com/xyz987"
+}
+
+### Eliminar cita
+DELETE http://localhost:4001/citas/3
+
+### Citas de un paciente
+GET http://localhost:4001/citas/paciente/1/mis-citas
+
+### Citas de un médico
+GET http://localhost:4001/citas/medico/4/mis-citas
+
+
+#############################################
+# 6. Horarios
+#############################################
+
+### Crear horario
+POST http://localhost:4001/horarios
+Content-Type: application/json
+
+{
+  "fecha_inicio": "2025-09-23 08:00:00",
+  "fecha_fin": "2025-09-23 12:00:00",
+  "id_medico": 4
+}
+
+### Listar todos los horarios
+GET http://localhost:4001/horarios
+
+### Horarios por médico
+GET http://localhost:4001/horarios/medico/4
+
+### Actualizar horario
+PUT http://localhost:4001/horarios/1
+Content-Type: application/json
+
+{
+  "fecha_inicio": "2025-09-23 09:00:00",
+  "fecha_fin": "2025-09-23 13:00:00"
+}
+
+### Eliminar horario
+DELETE http://localhost:4001/horarios/2
+
+
+#############################################
+# 7. Chats
+#############################################
+
+### Crear chat
+POST http://localhost:4001/chats
+Content-Type: application/json
+
+{ "id_paciente": 1, "id_medico": 4 }
+
+### Mis chats (paciente)
+GET http://localhost:4001/chats/paciente/1/mis-chats
+
+### Mis chats (médico)
+GET http://localhost:4001/chats/medico/4/mis-chats
+
+
+#############################################
+# 8. Mensajes
+#############################################
+
+### Enviar mensaje
+POST http://localhost:4001/mensajes
+Content-Type: application/json
+
+{ "id_chat": 2, "id_usuario": 11, "mensaje": "Hola doctor, ¿cómo está?" }
+
+### Obtener mensajes de un chat
+GET http://localhost:4001/mensajes/2
+
+
+#############################################
+# 9. Registros Médicos
+#############################################
+
+### Crear registro médico
+POST http://localhost:4001/registros
+Content-Type: application/json
+
+{ "id_paciente": 1, "id_medico": 4, "notas": "Paciente con hipertensión leve" }
+
+### Obtener registros de un paciente
+GET http://localhost:4001/registros/paciente/1
+
+
+#############################################
+# 10. Pagos
+#############################################
+
+### Crear pago
+POST http://localhost:4001/pagos
+Content-Type: application/json
+
+{ "monto": 200.50, "fecha": "2025-09-21 14:00:00" }
+
+### Obtener pago por id
+GET http://localhost:4001/pagos/1

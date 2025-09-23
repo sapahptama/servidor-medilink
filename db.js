@@ -1,17 +1,27 @@
-const mysql = require("mysql")
+const mysql = require("mysql2");
+
+// Configuración de la base de datos
 const dbConfig = {
     host: "localhost",
     port: 3306,
     user: "root",
     database: "medilink",
-}
-const pool = mysql.createConnection(dbConfig)
-pool.connect(function(err) {
-    if (err) throw err;
-    console.log("Conectado a la base de datos MySQL!");
+};
+
+const pool = mysql.createPool(dbConfig);
+
+// Verificar conexión
+pool.getConnection((err, connection) => {
+    if (err) {
+        console.error("❌ Error al conectar a la base de datos:", err.message);
+    } else {
+        console.log("conectado a la base de datos mysql");
+        connection.release();
+    }
 });
 
-module.exports = pool
+module.exports = pool;
+
 
 // const mysql = require('mysql');
 // const mysqlConnection = mysql.createConnection({
