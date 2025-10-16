@@ -18,6 +18,31 @@ router.post('/', (req, res) => {
   });
 });
 
+router.get("/horarios-activos/medico/:id", (req, res) => {
+  const { id } = req.params;
+  const query = `SELECT * FROM horarios WHERE id_medico = ? AND fecha_fin > NOW() ORDER BY fecha_inicio ASC`;
+  mysqlConnection.query(query, [id], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Error al obtener horarios activos del médico" });
+    }
+    res.json(rows);
+  })
+})
+// obtener los horarios activos de los medicos de un paciente donde tenga citas
+router.get("/horarios-activos/paciente/:id", (req, res) => {
+  const { id } = req.params;
+  const query = `SELECT DISTINCT h.* FROM horarios h JOIN citas c ON h.id_medico = c.id_medico
+    WHERE c.id_paciente = ? AND h.fecha_fin > NOW() ORDER BY h.fecha_inicio ASC`;
+  mysqlConnection.query(query, [id], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Error al obtener horarios activos del paciente" });
+    }
+    res.json(rows);
+  })
+})
+
 // Listar todos los horarios
 router.get('/', (req, res) => {
   mysqlConnection.query('SELECT * FROM horarios', (err, rows) => {

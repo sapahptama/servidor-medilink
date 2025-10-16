@@ -2,6 +2,25 @@ const { Router } = require('express');
 const router = Router();
 const mysqlConnection = require('../db');
 
+// Consultar si un paciente tiene una cita activa (futura o en curso)
+router.get('/paciente/:id/activa', (req, res) => {
+  const { id } = req.params;
+  const query = `
+    SELECT * FROM citas 
+    WHERE id_paciente = ? AND fecha > NOW()
+    ORDER BY fecha ASC
+    LIMIT 1
+  `;
+  mysqlConnection.query(query, [id], (err, rows) => {
+    if (err) return res.status(500).json({ error: "Error al consultar cita activa" });
+    if (rows.length > 0) {
+      res.json({ activa: true, cita: rows[0] });
+    } else {
+      res.json({ activa: false });
+    }
+  });
+});
+
 // crear cita
 router.post('/', (req, res) => {
   const { id_paciente, id_medico, fecha, id_pago, link_llamada } = req.body;
