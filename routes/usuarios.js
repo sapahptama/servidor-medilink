@@ -133,4 +133,29 @@ router.get('/:id', (req, res) => {
   });
 });
 
+router.post('/login', (req, res) => {
+  const { correo, contrasena } = req.body;
+  if (!correo || !contrasena) {
+    return res.status(400).json({ error: "Correo y contraseña son requeridos" });
+  }
+  const query = `
+    SELECT * FROM usuarios 
+    WHERE correo = ? AND contrasena = ?
+    LIMIT 1
+  `;
+  mysqlConnection.query(query, [correo, contrasena], (err, rows) => {
+    if (err) {
+      console.error(err);
+      return res.status(500).json({ error: "Error en el servidor" });
+    }
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Credenciales incorrectas" });
+    }
+    // Puedes devolver solo los datos necesarios, no la contraseña
+    const usuario = rows[0];
+    delete usuario.contrasena;
+    res.json({ usuario });
+  });
+});
+
 module.exports = router;
