@@ -1,13 +1,5 @@
 // const mysql = require("mysql2");
 
-// // Configuración de la base de datos
-// const dbConfig = {
-//     host: "localhost",
-//     port: 3306,
-//     user: "root",
-//     database: "medilink",
-// };
-
 // const pool = mysql.createPool(dbConfig);
 
 // // Verificar conexión

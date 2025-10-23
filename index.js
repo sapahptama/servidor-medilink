@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-
+const path = require('path');
 const app = express();
 
 // Importamos el index de rutas
@@ -10,6 +10,8 @@ const routes = require('./routes');
 app.use(cors({ origin: '*' }));
 app.set('port', process.env.PORT || 4001);
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 
 // Rutas centralizadas
 app.use('/', routes);

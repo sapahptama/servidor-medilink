@@ -133,4 +133,75 @@ router.get('/:id', (req, res) => {
   });
 });
 
+// 🔹 LOGIN con detección de rol (medico/paciente)
+router.post('/login', (req, res) => {
+  const { correo, contrasena } = req.body;
+
+  if (!correo || !contrasena) {
+    return res.status(400).json({ error: "Correo y contraseña son requeridos" });
+  }
+
+  const queryUsuario = `
+    SELECT id, nombre, apellido, telefono, correo, rol
+    FROM usuarios
+    WHERE correo = ? AND contrasena = SHA1(?)
+    LIMIT 1
+  `;
+
+  mysqlConnection.query(queryUsuario, [correo, contrasena], (err, rows) => {
+    if (err) {
+      console.error("Error al buscar usuario:", err);
+      return res.status(500).json({ error: "Error en el servidor" });
+    }
+
+    if (rows.length === 0) {
+      return res.status(401).json({ error: "Credenciales incorrectas" });
+    }
+
+    const usuario = rows[0];
+
+    // 🔎 Verificar si el usuario pertenece a médico o paciente
+    const verificarRol = () => {
+      return new Promise((resolve, reject) => {
+        if (usuario.rol === "medico") {
+          const queryMedico = `
+            SELECT id, especialidad, anios_experiencia, foto
+            FROM medico WHERE id_usuario = ?
+            LIMIT 1
+          `;
+          mysqlConnection.query(queryMedico, [usuario.id], (err2, rows2) => {
+            if (err2) return reject(err2);
+            if (rows2.length > 0)
+              return resolve({ ...usuario, ...rows2[0], rol: "medico" });
+            resolve(usuario);
+          });
+        } else if (usuario.rol === "paciente") {
+          const queryPaciente = `
+            SELECT pacientes.id, u.tipo_sangre, u.fecha_nacimiento
+            FROM pacientes JOIN usuarios u ON u.id = pacientes.id_usuario
+            LIMIT 1
+          `;
+          mysqlConnection.query(queryPaciente, [usuario.id], (err3, rows3) => {
+            if (err3) return reject(err3);
+            if (rows3.length > 0)
+              return resolve({ ...usuario, ...rows3[0], rol: "paciente" });
+            resolve(usuario);
+          });
+        } else {
+          resolve(usuario); // Rol genérico
+        }
+      });
+    };
+
+    verificarRol()
+      .then((usuarioFinal) => {
+        res.json({ usuario: usuarioFinal });
+      })
+      .catch((error) => {
+        console.error("Error al obtener rol:", error);
+        res.status(500).json({ error: "Error al obtener rol del usuario" });
+      });
+  });
+});
+
 module.exports = router;
