@@ -14,7 +14,6 @@
 
 // module.exports = pool;
 
-
 const mysql = require('mysql');
 const mysqlConnection = mysql.createConnection({
     host: 'b6y6cwxy5myxhxr0kncl-mysql.services.clever-cloud.com',
