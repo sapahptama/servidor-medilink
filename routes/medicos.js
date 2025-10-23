@@ -30,7 +30,6 @@ router.get("/:id", (req, res) => {
   });
 });
 
-// Crear médico (solo datos visuales)
 router.post("/", (req, res) => {
   const {
     nombre,
@@ -49,63 +48,45 @@ router.post("/", (req, res) => {
     universidad,
   } = req.body;
 
-  mysqlConnection.getConnection((err, connection) => {
-    if (err) return res.status(500).json({ error: "Error en la conexión DB" });
+  const nuevoUsuario = `
+    INSERT INTO usuarios (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre)
+    VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?)
+  `;
 
-    connection.beginTransaction((err) => {
+  mysqlConnection.query(
+    nuevoUsuario,
+    [nombre, apellidos, telefono, correo, contrasena, cedula, direccion, fechaNacimiento, tipoSangre],
+    (err, resultUsuario) => {
       if (err) {
-        connection.release();
-        return res.status(500).json({ error: "Error al iniciar transacción" });
+        console.error("❌ Error al registrar usuario:", err.message);
+        return res.status(500).json({ error: "Error al registrar usuario" });
       }
 
-      const nuevoUsuario = `
-        INSERT INTO usuarios (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre)
-        VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?)
+      const idUsuario = resultUsuario.insertId;
+
+      const nuevoMedico = `
+        INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
+        VALUES (?, ?, ?, ?, ?, ?)
       `;
-      connection.query(
-        nuevoUsuario,
-        [nombre, apellidos, telefono, correo, contrasena, cedula, direccion, fechaNacimiento, tipoSangre],
-        (err, results) => {
-          if (err) {
-            return connection.rollback(() => {
-              connection.release();
-              res.status(500).json({ error: "Error al registrar usuario" });
-            });
+      mysqlConnection.query(
+        nuevoMedico,
+        [idUsuario, especialidad, experiencia || 0, numeroRegistro, rethus, universidad],
+        (err2) => {
+          if (err2) {
+            console.error("❌ Error al registrar médico:", err2.message);
+            return res.status(500).json({ error: "Error al registrar médico" });
           }
 
-          const idUsuario = results.insertId;
-          const nuevoMedico = `
-            INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
-            VALUES (?, ?, ?, ?, ?, ?)
-          `;
-          connection.query(
-            nuevoMedico,
-            [idUsuario, especialidad, experiencia || 0, numeroRegistro, rethus, universidad],
-            (err2) => {
-              if (err2) {
-                return connection.rollback(() => {
-                  connection.release();
-                  res.status(500).json({ error: "Error al registrar médico" });
-                });
-              }
-
-              connection.commit((err3) => {
-                if (err3) {
-                  return connection.rollback(() => {
-                    connection.release();
-                    res.status(500).json({ error: "Error al confirmar transacción" });
-                  });
-                }
-                connection.release();
-                res.json({ message: "✅ Médico registrado correctamente", idUsuario });
-              });
-            }
-          );
+          res.json({
+            message: "✅ Médico registrado correctamente",
+            idUsuario,
+          });
         }
       );
-    });
-  });
+    }
+  );
 });
+
 
 router.put("/:id", (req, res) => {
   const { id } = req.params;
