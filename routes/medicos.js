@@ -1,108 +1,180 @@
 const { Router } = require("express");
 const router = Router();
-const mysqlConnection = require("../db");
+const { query, transaction } = require("../db");
+
+// Validar campos obligatorios
+const validarMedico = (data, campos) => {
+  const faltantes = campos.filter(campo => !data[campo]);
+  if (faltantes.length > 0) {
+    throw { status: 400, message: `Campos obligatorios: ${faltantes.join(', ')}` };
+  }
+};
 
 // Obtener todos los médicos
-router.get("/", (req, res) => {
-  const query = `
-    SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
-    FROM medico m
-    JOIN usuarios u ON m.id_usuario = u.id
-  `;
-  mysqlConnection.query(query, (err, rows) => {
-    if (!err) res.json(rows);
-    else res.status(500).json({ error: "Error al obtener médicos" });
-  });
+router.get("/", async (req, res) => {
+  try {
+    const medicos = await query(`
+      SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
+      FROM medico m
+      JOIN usuarios u ON m.id_usuario = u.id
+    `);
+    res.json(medicos);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener médicos" });
+  }
 });
 
 // Obtener médico por ID
-router.get("/:id", (req, res) => {
-  const { id } = req.params;
-  const query = `
-    SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
-    FROM medico m
-    JOIN usuarios u ON m.id_usuario = u.id
-    WHERE m.id = ?
-  `;
-  mysqlConnection.query(query, [id], (err, rows) => {
-    if (!err) res.json(rows[0]);
-    else res.status(500).json({ error: "Error al obtener médico" });
-  });
-});
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
 
-router.post("/", (req, res) => {
-  const {
-    nombre,
-    apellidos,
-    telefono,
-    correo,
-    contrasena,
-    cedula,
-    direccion,
-    fechaNacimiento,
-    tipoSangre,
-    especialidad,
-    experiencia,
-    numeroRegistro,
-    rethus,
-    universidad,
-  } = req.body;
-
-  const nuevoUsuario = `
-    INSERT INTO usuarios (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre)
-    VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?)
-  `;
-
-  mysqlConnection.query(
-    nuevoUsuario,
-    [nombre, apellidos, telefono, correo, contrasena, cedula, direccion, fechaNacimiento, tipoSangre],
-    (err, resultUsuario) => {
-      if (err) {
-        console.error("❌ Error al registrar usuario:", err.message);
-        return res.status(500).json({ error: "Error al registrar usuario" });
-      }
-
-      const idUsuario = resultUsuario.insertId;
-
-      const nuevoMedico = `
-        INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `;
-      mysqlConnection.query(
-        nuevoMedico,
-        [idUsuario, especialidad, experiencia || 0, numeroRegistro, rethus, universidad],
-        (err2) => {
-          if (err2) {
-            console.error("❌ Error al registrar médico:", err2.message);
-            return res.status(500).json({ error: "Error al registrar médico" });
-          }
-
-          res.json({
-            message: "✅ Médico registrado correctamente",
-            idUsuario,
-          });
-        }
-      );
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: "ID inválido" });
     }
-  );
+
+    const medicos = await query(`
+      SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
+      FROM medico m
+      JOIN usuarios u ON m.id_usuario = u.id
+      WHERE m.id = ?
+    `, [id]);
+
+    if (medicos.length === 0) {
+      return res.status(404).json({ error: "Médico no encontrado" });
+    }
+
+    res.json(medicos[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener médico" });
+  }
 });
 
+// Crear médico con usuario asociado
+router.post("/", async (req, res) => {
+  try {
+    const {
+      nombre,
+      apellidos,
+      telefono,
+      correo,
+      contrasena,
+      cedula,
+      direccion,
+      fechaNacimiento,
+      tipoSangre,
+      especialidad,
+      experiencia,
+      numeroRegistro,
+      rethus,
+      universidad,
+    } = req.body;
 
-router.put("/:id", (req, res) => {
-  const { id } = req.params;
-  const { especialidad, anios_experiencia, tarifa } = req.body;
-  const query = `UPDATE medico SET especialidad=?, anios_experiencia=?, tarifa=? WHERE id=?`;
-  mysqlConnection.query(query, [especialidad, anios_experiencia, tarifa, id], (err) => {
-    if (err) return res.status(500).json({ error: "Error al actualizar médico" });
+    validarMedico(
+      { nombre, apellidos, correo, contrasena, cedula, fechaNacimiento, tipoSangre, numeroRegistro },
+      ['nombre', 'apellidos', 'correo', 'contrasena', 'cedula', 'fechaNacimiento', 'tipoSangre', 'numeroRegistro']
+    );
+
+    // Verificar si el correo o cédula ya existen
+    const usuarioExistente = await query(
+      'SELECT id FROM usuarios WHERE correo = ? OR numero_documento = ?',
+      [correo, cedula]
+    );
+
+    if (usuarioExistente.length > 0) {
+      return res.status(400).json({ error: "El correo o cédula ya está registrado" });
+    }
+
+    let idUsuario;
+
+    await transaction(async (connection) => {
+      const resultUsuario = await new Promise((resolve, reject) => {
+        connection.query(
+          `INSERT INTO usuarios (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre)
+           VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?)`,
+          [nombre, apellidos, telefono, correo, contrasena, cedula, direccion, fechaNacimiento, tipoSangre],
+          (err, results) => {
+            if (err) reject(err);
+            else resolve(results);
+          }
+        );
+      });
+
+      idUsuario = resultUsuario.insertId;
+
+      await new Promise((resolve, reject) => {
+        connection.query(
+          `INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [idUsuario, especialidad || null, experiencia || 0, numeroRegistro, rethus || null, universidad || null],
+          (err) => {
+            if (err) reject(err);
+            else resolve();
+          }
+        );
+      });
+    });
+
+    res.status(201).json({ message: "✅ Médico registrado correctamente", id_usuario: idUsuario });
+  } catch (err) {
+    console.error(err);
+    if (err.status) {
+      return res.status(err.status).json({ error: err.message });
+    }
+    res.status(500).json({ error: "Error al registrar médico" });
+  }
+});
+
+// Actualizar médico
+router.put("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { especialidad, anios_experiencia, tarifa } = req.body;
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    // Verificar que el médico existe
+    const medicoExistente = await query('SELECT id FROM medico WHERE id = ?', [id]);
+    if (medicoExistente.length === 0) {
+      return res.status(404).json({ error: "Médico no encontrado" });
+    }
+
+    await query(
+      'UPDATE medico SET especialidad = ?, anios_experiencia = ?, tarifa = ? WHERE id = ?',
+      [especialidad, anios_experiencia, tarifa, id]
+    );
+
     res.json({ message: "Médico actualizado correctamente" });
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al actualizar médico" });
+  }
 });
 
-router.delete("/:id", (req, res) => {
-  mysqlConnection.query("DELETE FROM medico WHERE id=?", [req.params.id], (err) => {
-    if (err) res.status(500).json({ error: "Error al eliminar médico" });
-    else res.json({ message: "Médico eliminado correctamente" });
-  });
+// Eliminar médico
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id || isNaN(id)) {
+      return res.status(400).json({ error: "ID inválido" });
+    }
+
+    const resultado = await query("DELETE FROM medico WHERE id = ?", [id]);
+
+    if (resultado.affectedRows === 0) {
+      return res.status(404).json({ error: "Médico no encontrado" });
+    }
+
+    res.json({ message: "Médico eliminado correctamente" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al eliminar médico" });
+  }
 });
 
 module.exports = router;
