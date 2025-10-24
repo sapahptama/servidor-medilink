@@ -31,7 +31,7 @@ const validarFechas = (fecha_inicio, fecha_fin) => {
 };
 
 const validarTipoConfiguracion = (tipo) => {
-  const tiposValidos = ['especifico', 'rango', 'recurrente'];
+  const tiposValidos = ['especifico', 'recurrente'];
   if (!tiposValidos.includes(tipo)) {
     throw { status: 400, message: `Tipo debe ser: ${tiposValidos.join(', ')}` };
   }
