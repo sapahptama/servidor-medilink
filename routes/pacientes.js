@@ -162,24 +162,4 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Eliminar paciente
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    validarID(id);
-
-    const resultado = await query('DELETE FROM pacientes WHERE id = ?', [id]);
-
-    if (resultado.affectedRows === 0) {
-      return res.status(404).json({ error: "Paciente no encontrado" });
-    }
-
-    res.json({ message: "Paciente eliminado correctamente" });
-  } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al eliminar paciente" });
-  }
-});
-
 module.exports = router;

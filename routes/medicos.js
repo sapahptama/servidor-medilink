@@ -185,28 +185,4 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-router.delete("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
-
-    await query("DELETE FROM medico WHERE id_usuario = ?", [id]);
-
-    const resultado = await query("DELETE FROM usuarios WHERE id = ?", [id]);
-
-    if (resultado.affectedRows === 0) {
-      return res.status(404).json({ error: "Médico no encontrado" });
-    }
-
-    res.json({ message: "🩺 Médico y usuario eliminados correctamente" });
-  } catch (err) {
-    console.error("❌ Error al eliminar médico:", err);
-    res.status(500).json({ error: "Error al eliminar médico" });
-  }
-});
-
-
 module.exports = router;
