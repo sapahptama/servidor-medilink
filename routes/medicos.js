@@ -52,7 +52,6 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// Crear médico con usuario asociado
 router.post("/", async (req, res) => {
   try {
     const {
@@ -70,21 +69,31 @@ router.post("/", async (req, res) => {
       numeroRegistro,
       rethus,
       universidad,
+      foto_perfil,
     } = req.body;
 
     validarMedico(
       { nombre, apellidos, correo, contrasena, cedula, fechaNacimiento, tipoSangre, numeroRegistro },
-      ['nombre', 'apellidos', 'correo', 'contrasena', 'cedula', 'fechaNacimiento', 'tipoSangre', 'numeroRegistro']
+      ["nombre", "apellidos", "correo", "contrasena", "cedula", "fechaNacimiento", "tipoSangre", "numeroRegistro"]
     );
 
-    // Verificar si el correo o cédula ya existen
     const usuarioExistente = await query(
-      'SELECT id FROM usuarios WHERE correo = ? OR numero_documento = ?',
+      "SELECT id FROM usuarios WHERE correo = ? OR numero_documento = ?",
       [correo, cedula]
     );
-
     if (usuarioExistente.length > 0) {
-      return res.status(400).json({ error: "El correo o cédula ya está registrado" });
+      return res.status(400).json({ error: "El correo o la cédula ya está registrado" });
+    }
+
+    // Procesar la imagen base64 a binario
+    let fotoBuffer = null;
+    if (foto_perfil) {
+      try {
+        const base64Data = foto_perfil.split(";base64,").pop();
+        fotoBuffer = Buffer.from(base64Data, "base64");
+      } catch (error) {
+        console.warn("⚠️ Error procesando imagen:", error.message);
+      }
     }
 
     let idUsuario;
@@ -92,13 +101,22 @@ router.post("/", async (req, res) => {
     await transaction(async (connection) => {
       const resultUsuario = await new Promise((resolve, reject) => {
         connection.query(
-          `INSERT INTO usuarios (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre)
-           VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?)`,
-          [nombre, apellidos, telefono, correo, contrasena, cedula, direccion, fechaNacimiento, tipoSangre],
-          (err, results) => {
-            if (err) reject(err);
-            else resolve(results);
-          }
+          `INSERT INTO usuarios 
+          (nombre, apellido, telefono, correo, contrasena, rol, numero_documento, direccion, fecha_nacimiento, tipo_sangre, foto_perfil)
+          VALUES (?, ?, ?, ?, SHA1(?), 'medico', ?, ?, ?, ?, ?)`,
+          [
+            nombre,
+            apellidos,
+            telefono,
+            correo,
+            contrasena,
+            cedula,
+            direccion,
+            fechaNacimiento,
+            tipoSangre,
+            fotoBuffer,
+          ],
+          (err, results) => (err ? reject(err) : resolve(results))
         );
       });
 
@@ -109,21 +127,33 @@ router.post("/", async (req, res) => {
           `INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
            VALUES (?, ?, ?, ?, ?, ?)`,
           [idUsuario, especialidad || null, experiencia || 0, numeroRegistro, rethus || null, universidad || null],
-          (err) => {
-            if (err) reject(err);
-            else resolve();
-          }
+          (err) => (err ? reject(err) : resolve())
         );
       });
     });
 
-    res.status(201).json({ message: "✅ Médico registrado correctamente", id_usuario: idUsuario });
+    res.status(201).json({
+      message: "✅ Médico registrado correctamente",
+      id_usuario: idUsuario,
+    });
   } catch (err) {
-    console.error(err);
-    if (err.status) {
-      return res.status(err.status).json({ error: err.message });
+    console.error("❌ Error en registro médico:", err);
+    res.status(err.status || 500).json({ error: err.message || "Error al registrar médico" });
+  }
+});
+
+router.get("/foto/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query("SELECT foto_perfil FROM usuarios WHERE id = ?", [id]);
+    if (result.length === 0 || !result[0].foto_perfil) {
+      return res.status(404).send("Foto no encontrada");
     }
-    res.status(500).json({ error: "Error al registrar médico" });
+    res.setHeader("Content-Type", "image/png");
+    res.send(result[0].foto_perfil);
+  } catch (err) {
+    console.error("❌ Error al obtener foto:", err);
+    res.status(500).send("Error al obtener foto");
   }
 });
 
