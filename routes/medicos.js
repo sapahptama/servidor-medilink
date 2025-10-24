@@ -10,7 +10,6 @@ const validarMedico = (data, campos) => {
   }
 };
 
-// Obtener todos los médicos
 router.get("/", async (req, res) => {
   try {
     const medicos = await query(`
@@ -34,9 +33,22 @@ router.get("/", async (req, res) => {
       FROM medico m
       JOIN usuarios u ON m.id_usuario = u.id
     `);
-    res.json(medicos);
+
+    // 🔹 Convertir las fotos (BLOB) a base64 URL
+    const medicosConFotos = medicos.map((m) => {
+      if (m.foto_perfil) {
+        const base64 = Buffer.from(m.foto_perfil).toString("base64");
+        m.foto_perfil = `data:image/png;base64,${base64}`;
+      } else {
+        // Si no tiene foto, puede venir nulo
+        m.foto_perfil = null;
+      }
+      return m;
+    });
+
+    res.json(medicosConFotos);
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error al obtener médicos:", err);
     res.status(500).json({ error: "Error al obtener médicos" });
   }
 });
@@ -178,22 +190,6 @@ router.post("/", async (req, res) => {
   } catch (err) {
     console.error("❌ Error en registro médico:", err);
     res.status(err.status || 500).json({ error: err.message || "Error al registrar médico" });
-  }
-});
-
-// Obtener foto de perfil
-router.get("/foto/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const result = await query("SELECT foto_perfil FROM usuarios WHERE id = ?", [id]);
-    if (result.length === 0 || !result[0].foto_perfil) {
-      return res.status(404).send("Foto no encontrada");
-    }
-    res.setHeader("Content-Type", "image/png");
-    res.send(result[0].foto_perfil);
-  } catch (err) {
-    console.error("❌ Error al obtener foto:", err);
-    res.status(500).send("Error al obtener foto");
   }
 });
 
