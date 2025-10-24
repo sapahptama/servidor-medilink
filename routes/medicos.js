@@ -194,7 +194,7 @@ router.delete("/:id", async (req, res) => {
       return res.status(400).json({ error: "ID inválido" });
     }
 
-    const resultado = await query("DELETE FROM medico WHERE id = ?", [id]);
+    const resultado = await query("DELETE FROM usuarios JOIN medico ON usuarios.id = medico.id_usuario WHERE usuarios.id = ?", [id]);
 
     if (resultado.affectedRows === 0) {
       return res.status(404).json({ error: "Médico no encontrado" });
