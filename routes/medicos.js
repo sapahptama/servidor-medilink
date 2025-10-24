@@ -4,9 +4,9 @@ const { query, transaction } = require("../db");
 
 // Validar campos obligatorios
 const validarMedico = (data, campos) => {
-  const faltantes = campos.filter(campo => !data[campo]);
+  const faltantes = campos.filter((campo) => !data[campo]);
   if (faltantes.length > 0) {
-    throw { status: 400, message: `Campos obligatorios: ${faltantes.join(', ')}` };
+    throw { status: 400, message: `Campos obligatorios: ${faltantes.join(", ")}` };
   }
 };
 
@@ -14,7 +14,23 @@ const validarMedico = (data, campos) => {
 router.get("/", async (req, res) => {
   try {
     const medicos = await query(`
-      SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
+      SELECT 
+        m.id AS id_medico,
+        u.id AS id_usuario,
+        u.nombre,
+        u.apellido,
+        u.correo,
+        u.telefono,
+        u.fecha_nacimiento,
+        u.tipo_sangre,
+        u.foto_perfil,
+        m.especialidad,
+        m.anios_experiencia,
+        m.tarifa,
+        m.numeroRegistro,
+        m.rethus,
+        m.universidad,
+        m.direccion_consultorio
       FROM medico m
       JOIN usuarios u ON m.id_usuario = u.id
     `);
@@ -34,12 +50,31 @@ router.get("/:id", async (req, res) => {
       return res.status(400).json({ error: "ID inválido" });
     }
 
-    const medicos = await query(`
-      SELECT m.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
+    const medicos = await query(
+      `
+      SELECT 
+        m.id AS id_medico,
+        u.id AS id_usuario,
+        u.nombre,
+        u.apellido,
+        u.correo,
+        u.telefono,
+        u.fecha_nacimiento,
+        u.tipo_sangre,
+        u.foto_perfil,
+        m.especialidad,
+        m.anios_experiencia,
+        m.tarifa,
+        m.numeroRegistro,
+        m.rethus,
+        m.universidad,
+        m.direccion_consultorio
       FROM medico m
       JOIN usuarios u ON m.id_usuario = u.id
       WHERE m.id = ?
-    `, [id]);
+      `,
+      [id]
+    );
 
     if (medicos.length === 0) {
       return res.status(404).json({ error: "Médico no encontrado" });
@@ -52,6 +87,7 @@ router.get("/:id", async (req, res) => {
   }
 });
 
+// Registrar nuevo médico
 router.post("/", async (req, res) => {
   try {
     const {
@@ -77,6 +113,7 @@ router.post("/", async (req, res) => {
       ["nombre", "apellidos", "correo", "contrasena", "cedula", "fechaNacimiento", "tipoSangre", "numeroRegistro"]
     );
 
+    // Verificar duplicados
     const usuarioExistente = await query(
       "SELECT id FROM usuarios WHERE correo = ? OR numero_documento = ?",
       [correo, cedula]
@@ -85,7 +122,7 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "El correo o la cédula ya está registrado" });
     }
 
-    // Procesar la imagen base64 a binario
+    // Procesar imagen base64
     let fotoBuffer = null;
     if (foto_perfil) {
       try {
@@ -99,6 +136,7 @@ router.post("/", async (req, res) => {
     let idUsuario;
 
     await transaction(async (connection) => {
+      // Crear usuario
       const resultUsuario = await new Promise((resolve, reject) => {
         connection.query(
           `INSERT INTO usuarios 
@@ -122,11 +160,12 @@ router.post("/", async (req, res) => {
 
       idUsuario = resultUsuario.insertId;
 
+      // Crear médico asociado
       await new Promise((resolve, reject) => {
         connection.query(
-          `INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [idUsuario, especialidad || null, experiencia || 0, numeroRegistro, rethus || null, universidad || null],
+          `INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad, direccion_consultorio)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [idUsuario, especialidad || null, experiencia || 0, numeroRegistro, rethus || null, universidad || null, null],
           (err) => (err ? reject(err) : resolve())
         );
       });
@@ -142,6 +181,7 @@ router.post("/", async (req, res) => {
   }
 });
 
+// Obtener foto de perfil
 router.get("/foto/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -167,14 +207,13 @@ router.put("/:id", async (req, res) => {
       return res.status(400).json({ error: "ID inválido" });
     }
 
-    // Verificar que el médico existe
-    const medicoExistente = await query('SELECT id FROM medico WHERE id = ?', [id]);
+    const medicoExistente = await query("SELECT id FROM medico WHERE id = ?", [id]);
     if (medicoExistente.length === 0) {
       return res.status(404).json({ error: "Médico no encontrado" });
     }
 
     await query(
-      'UPDATE medico SET especialidad = ?, anios_experiencia = ?, tarifa = ? WHERE id = ?',
+      "UPDATE medico SET especialidad = ?, anios_experiencia = ?, tarifa = ? WHERE id = ?",
       [especialidad, anios_experiencia, tarifa, id]
     );
 
