@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!id || isNaN(id)) {
       return res.status(400).json({ error: "ID inválido" });
     }
@@ -195,7 +195,7 @@ router.post('/login', async (req, res) => {
 
     if (usuario.rol === 'medico') {
       const medicos = await query(
-        'SELECT id, especialidad, anios_experiencia, foto FROM medico WHERE id_usuario = ? LIMIT 1',
+        'SELECT id, especialidad, anios_experiencia, tarifa FROM medico WHERE id_usuario = ? LIMIT 1',
         [usuario.id]
       );
       if (medicos.length > 0) {
