@@ -49,6 +49,49 @@ const validarDiasSemana = (dias_semana) => {
   }
 };
 
+// ==================== CONVERSIONES DE FECHAS ====================
+
+// Convertir ISO a MySQL DATETIME
+const convertirAMySQLDatetime = (isoString) => {
+  const fecha = new Date(isoString);
+  if (isNaN(fecha.getTime())) {
+    throw { status: 400, message: "Fecha inválida" };
+  }
+  
+  const year = fecha.getFullYear();
+  const month = String(fecha.getMonth() + 1).padStart(2, '0');
+  const day = String(fecha.getDate()).padStart(2, '0');
+  const hours = String(fecha.getHours()).padStart(2, '0');
+  const minutes = String(fecha.getMinutes()).padStart(2, '0');
+  const seconds = String(fecha.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
+// Convertir MySQL DATETIME a ISO 8601
+const convertirAISO = (mysqlDatetime) => {
+  if (!mysqlDatetime) return null;
+  const fecha = new Date(mysqlDatetime);
+  if (isNaN(fecha.getTime())) return null;
+  return fecha.toISOString();
+};
+
+// Parsear horario de BD y convertir fechas
+const parsearHorario = (horario) => {
+  const horarioParseado = { ...horario };
+  if (horario.dias_semana && typeof horario.dias_semana === 'string') {
+    horarioParseado.dias_semana = JSON.parse(horario.dias_semana);
+  }
+  // Convertir fechas MySQL a ISO
+  if (horario.fecha_inicio) {
+    horarioParseado.fecha_inicio = convertirAISO(horario.fecha_inicio);
+  }
+  if (horario.fecha_fin) {
+    horarioParseado.fecha_fin = convertirAISO(horario.fecha_fin);
+  }
+  return horarioParseado;
+};
+
 // ==================== CREAR HORARIO ====================
 
 router.post('/', async (req, res) => {
@@ -88,6 +131,10 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: "Médico no válido" });
     }
 
+    // Convertir fechas ISO a formato MySQL
+    const fecha_inicio_mysql = convertirAMySQLDatetime(fecha_inicio);
+    const fecha_fin_mysql = convertirAMySQLDatetime(fecha_fin);
+
     // Insertar horario
     const dias_semana_json = dias_semana ? JSON.stringify(dias_semana) : null;
     
@@ -96,8 +143,8 @@ router.post('/', async (req, res) => {
        (fecha_inicio, fecha_fin, id_medico, tipo_configuracion, dias_semana, fecha_recurrencia_inicio, fecha_recurrencia_fin, activo) 
        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)`,
       [
-        fecha_inicio, 
-        fecha_fin, 
+        fecha_inicio_mysql, 
+        fecha_fin_mysql, 
         id_medico,
         tipo_configuracion,
         dias_semana_json,
@@ -125,7 +172,9 @@ router.get('/', async (req, res) => {
     const horarios = await query(
       'SELECT * FROM horarios WHERE activo = TRUE ORDER BY fecha_inicio DESC'
     );
-    res.json(horarios);
+    // Convertir fechas a ISO
+    const horariosConvertidos = horarios.map(parsearHorario);
+    res.json(horariosConvertidos);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Error al obtener horarios" });
@@ -148,12 +197,8 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: "Horario no encontrado" });
     }
 
-    // Parsear JSON si existe
-    const horario = horarios[0];
-    if (horario.dias_semana) {
-      horario.dias_semana = JSON.parse(horario.dias_semana);
-    }
-
+    // Parsear y convertir fechas
+    const horario = parsearHorario(horarios[0]);
     res.json(horario);
   } catch (err) {
     console.error(err);
@@ -179,15 +224,9 @@ router.get('/medico/:id', async (req, res) => {
       [id]
     );
 
-    // Parsear JSONs
-    const horariosParseados = horarios.map(h => {
-      if (h.dias_semana) {
-        h.dias_semana = JSON.parse(h.dias_semana);
-      }
-      return h;
-    });
-
-    res.json(horariosParseados);
+    // Parsear y convertir todas las fechas
+    const horariosConvertidos = horarios.map(parsearHorario);
+    res.json(horariosConvertidos);
   } catch (err) {
     console.error(err);
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -214,14 +253,9 @@ router.get('/medico/:id/activos', async (req, res) => {
       [id]
     );
 
-    const horariosParseados = horarios.map(h => {
-      if (h.dias_semana) {
-        h.dias_semana = JSON.parse(h.dias_semana);
-      }
-      return h;
-    });
-
-    res.json(horariosParseados);
+    // Parsear y convertir todas las fechas
+    const horariosConvertidos = horarios.map(parsearHorario);
+    res.json(horariosConvertidos);
   } catch (err) {
     console.error(err);
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -248,14 +282,9 @@ router.get('/paciente/:id/activos', async (req, res) => {
       ORDER BY h.fecha_inicio ASC
     `, [id]);
 
-    const horariosParseados = horarios.map(h => {
-      if (h.dias_semana) {
-        h.dias_semana = JSON.parse(h.dias_semana);
-      }
-      return h;
-    });
-
-    res.json(horariosParseados);
+    // Parsear y convertir todas las fechas
+    const horariosConvertidos = horarios.map(parsearHorario);
+    res.json(horariosConvertidos);
   } catch (err) {
     console.error(err);
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -275,14 +304,9 @@ router.get('/tipo/:tipo', async (req, res) => {
       [tipo]
     );
 
-    const horariosParseados = horarios.map(h => {
-      if (h.dias_semana) {
-        h.dias_semana = JSON.parse(h.dias_semana);
-      }
-      return h;
-    });
-
-    res.json(horariosParseados);
+    // Parsear y convertir todas las fechas
+    const horariosConvertidos = horarios.map(parsearHorario);
+    res.json(horariosConvertidos);
   } catch (err) {
     console.error(err);
     if (err.status) return res.status(err.status).json({ error: err.message });
@@ -328,13 +352,13 @@ router.put('/:id', async (req, res) => {
     const campos = [];
     const valores = [];
 
-    if (fecha_inicio) {
+    if (fecha_inicio && fecha_fin) {
+      const fecha_inicio_mysql = convertirAMySQLDatetime(fecha_inicio);
+      const fecha_fin_mysql = convertirAMySQLDatetime(fecha_fin);
       campos.push('fecha_inicio = ?');
-      valores.push(fecha_inicio);
-    }
-    if (fecha_fin) {
       campos.push('fecha_fin = ?');
-      valores.push(fecha_fin);
+      valores.push(fecha_inicio_mysql);
+      valores.push(fecha_fin_mysql);
     }
     if (tipo_configuracion) {
       campos.push('tipo_configuracion = ?');
