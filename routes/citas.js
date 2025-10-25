@@ -235,7 +235,9 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Citas de un médico - OPTIMIZADA
 router.get('/medico/:id', async (req, res) => {
+  let connection;
   try {
     const { id } = req.params;
     validarID(id);
@@ -254,7 +256,7 @@ router.get('/medico/:id', async (req, res) => {
 
     res.json(citas);
   } catch (err) {
-    console.error(err);
+    console.error('Error en /medico/:id:', err);
     if (err.status) return res.status(err.status).json({ error: err.message });
     res.status(500).json({ error: "Error al obtener citas del médico" });
   }

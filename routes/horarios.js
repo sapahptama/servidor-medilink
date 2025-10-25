@@ -234,14 +234,14 @@ router.get('/medico/:id', async (req, res) => {
   }
 });
 
-// ==================== OBTENER HORARIOS ACTIVOS DE UN MÉDICO ====================
-
+// Obtener horarios activos de un médico - OPTIMIZADA
 router.get('/medico/:id/activos', async (req, res) => {
   try {
     const { id } = req.params;
     validarID(id);
 
-    const medicos = await query('SELECT id FROM medico WHERE id = ?', [id]);
+    // Verificar que el médico existe
+    const medicos = await query('SELECT id FROM medico WHERE id = ? LIMIT 1', [id]);
     if (medicos.length === 0) {
       return res.status(404).json({ error: "Médico no encontrado" });
     }
@@ -249,21 +249,20 @@ router.get('/medico/:id/activos', async (req, res) => {
     const horarios = await query(
       `SELECT * FROM horarios 
        WHERE id_medico = ? AND activo = TRUE AND fecha_fin > NOW() 
-       ORDER BY fecha_inicio ASC`,
+       ORDER BY fecha_inicio ASC
+       LIMIT 100`, // Limitar resultados
       [id]
     );
 
-    // Parsear y convertir todas las fechas
     const horariosConvertidos = horarios.map(parsearHorario);
     res.json(horariosConvertidos);
   } catch (err) {
-    console.error(err);
+    console.error('Error en /medico/:id/activos:', err);
     if (err.status) return res.status(err.status).json({ error: err.message });
     res.status(500).json({ error: "Error al obtener horarios activos del médico" });
   }
 });
 
-// ==================== OBTENER HORARIOS ACTIVOS DE MÉDICOS DE UN PACIENTE ====================
 
 router.get('/paciente/:id/activos', async (req, res) => {
   try {

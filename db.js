@@ -5,10 +5,13 @@ const pool = mysql.createPool({
   user: 'ukmfzr4gmjpysakg',
   password: 'MAh9m7dtxiDiZVaQtXsq',
   database: 'b6y6cwxy5myxhxr0kncl',
-  connectionLimit: 10,
+  connectionLimit: 3,
+  acquireTimeout: 30000,
+  timeout: 60000,
   multipleStatements: false,
   waitForConnections: true,
-  queueLimit: 0,
+  queueLimit: 10,
+  connectTimeout: 10000,
 });
 
 pool.on('error', (err) => {
