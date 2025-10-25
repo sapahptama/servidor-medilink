@@ -235,4 +235,29 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+router.get('/medico/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    validarID(id);
+
+    const citas = await query(`
+      SELECT c.*, 
+             pm.nombre AS paciente_nombre, 
+             pm.apellido AS paciente_apellido,
+             p.id as id_paciente
+      FROM citas c
+      JOIN pacientes p ON c.id_paciente = p.id
+      JOIN usuarios pm ON p.id_usuario = pm.id
+      WHERE c.id_medico = ?
+      ORDER BY c.fecha DESC
+    `, [id]);
+
+    res.json(citas);
+  } catch (err) {
+    console.error(err);
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: "Error al obtener citas del médico" });
+  }
+});
+
 module.exports = router;

@@ -57,6 +57,30 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+router.get('/usuario/:idUsuario', async (req, res) => {
+  try {
+    const { idUsuario } = req.params;
+    validarID(idUsuario);
+
+    const pacientes = await query(`
+      SELECT p.*, u.nombre, u.apellido, u.correo, u.telefono, u.fecha_nacimiento, u.tipo_sangre
+      FROM pacientes p
+      JOIN usuarios u ON p.id_usuario = u.id
+      WHERE p.id_usuario = ?
+    `, [idUsuario]);
+
+    if (pacientes.length === 0) {
+      return res.status(404).json({ error: "Paciente no encontrado para este usuario" });
+    }
+
+    res.json(pacientes[0]);
+  } catch (err) {
+    console.error(err);
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: "Error al obtener paciente por usuario" });
+  }
+});
+
 // Crear paciente con usuario asociado
 router.post('/', async (req, res) => {
   try {
