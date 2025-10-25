@@ -68,7 +68,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Consultar cita activa (futura o en curso)
 router.get('/paciente/:id/activa', async (req, res) => {
   try {
     const { id } = req.params;
@@ -143,51 +142,64 @@ router.post('/', async (req, res) => {
   try {
     const { id_paciente, id_medico, fecha, id_pago, link_llamada } = req.body;
 
-    console.log('Datos recibidos para cita:', { id_paciente, id_medico, fecha }); // DEBUG
-
     validarCita({ id_paciente, id_medico, fecha }, ['id_paciente', 'id_medico', 'fecha']);
 
-    // Verificar que paciente y médico existen
-    const [pacientes, medicos] = await Promise.all([
-      query('SELECT id FROM pacientes WHERE id = ?', [id_paciente]),
-      query('SELECT id FROM medico WHERE id = ?', [id_medico])
-    ]);
+    const pacientes = await query(`
+      SELECT p.id 
+      FROM pacientes p 
+      WHERE p.id = ?
+    `, [id_paciente]);
 
     if (pacientes.length === 0) {
-      console.log('Paciente no encontrado:', id_paciente);
       return res.status(400).json({ error: "Paciente no válido" });
     }
 
+    const medicos = await query('SELECT id FROM medico WHERE id = ?', [id_medico]);
     if (medicos.length === 0) {
-      console.log('Médico no encontrado:', id_medico);
       return res.status(400).json({ error: "Médico no válido" });
     }
 
-    // VERIFICAR DISPONIBILIDAD - AGREGAR ESTA VALIDACIÓN
     const fechaCita = new Date(fecha);
-    const fechaFinCita = new Date(fechaCita.getTime() + 30 * 60 * 1000); // 30 minutos después
+    const fechaFinCita = new Date(fechaCita.getTime() + 30 * 60 * 1000);
 
-    // Verificar que no hay citas existentes en ese horario
     const citasExistentes = await query(
       `SELECT id FROM citas 
-       WHERE id_medico = ? AND fecha BETWEEN ? AND ?`,
-      [id_medico, fecha, fechaFinCita.toISOString().slice(0, 19).replace('T', ' ')]
+       WHERE id_medico = ? AND fecha BETWEEN DATE_SUB(?, INTERVAL 29 MINUTE) AND DATE_ADD(?, INTERVAL 29 MINUTE)`,
+      [id_medico, fecha, fecha]
     );
 
     if (citasExistentes.length > 0) {
       return res.status(400).json({ error: "Ya existe una cita en este horario" });
     }
 
-    // Verificar que el horario está dentro de un horario disponible del médico
     const horariosDisponibles = await query(
-      `SELECT id FROM horarios 
-       WHERE id_medico = ? AND activo = TRUE 
-       AND fecha_inicio <= ? AND fecha_fin >= ?`,
-      [id_medico, fecha, fechaFinCita.toISOString().slice(0, 19).replace('T', ' ')]
-    );
+  `SELECT h.id, h.tipo_configuracion, h.fecha_inicio, h.fecha_fin, h.dias_semana,
+          h.fecha_recurrencia_inicio, h.fecha_recurrencia_fin
+   FROM horarios h
+   WHERE h.id_medico = ? 
+   AND h.activo = TRUE 
+   AND h.tipo_configuracion != 'bloqueado'
+   AND (
+     -- Para horarios específicos: la cita debe estar dentro del rango
+     (h.tipo_configuracion = 'especifico' AND h.fecha_inicio <= ? AND h.fecha_fin >= ?)
+     OR
+     -- Para horarios recurrentes: verificar por día de la semana y rango de recurrencia
+     (h.tipo_configuracion = 'recurrente' 
+      AND h.fecha_recurrencia_inicio <= ? 
+      AND h.fecha_recurrencia_fin >= ?
+      AND JSON_EXTRACT(h.dias_semana, CONCAT('$.', LOWER(DAYNAME(?)))) = true
+     )
+   )`,
+  [
+    id_medico,
+    fecha, fechaFinCita.toISOString().slice(0, 19).replace('T', ' '),
+    fecha.split(' ')[0], fecha.split(' ')[0],
+    fecha
+  ]
+);
 
     if (horariosDisponibles.length === 0) {
-      return res.status(400).json({ error: "El médico no tiene disponibilidad en este horario" });
+      return res.status(400).json({ error: "El médico no tiene horario disponible en este momento" });
     }
 
     const resultado = await query(
@@ -195,16 +207,32 @@ router.post('/', async (req, res) => {
       [id_paciente, id_medico, fecha, id_pago || null, link_llamada || null]
     );
 
-    console.log('Cita creada exitosamente:', resultado.insertId); // DEBUG
-
     res.status(201).json({ 
       message: "Cita creada correctamente", 
       id: resultado.insertId 
     });
   } catch (err) {
-    console.error('Error al crear cita:', err);
+    console.error('❌ Error al crear cita:', err);
     if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al crear cita" });
+    res.status(500).json({ error: "Error interno del servidor al crear cita" });
+  }
+});
+
+router.get('/debug/paciente/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const paciente = await query(`
+      SELECT p.*, u.nombre, u.apellido 
+      FROM pacientes p 
+      JOIN usuarios u ON p.id_usuario = u.id 
+      WHERE p.id_usuario = ?
+    `, [userId]);
+    
+    res.json(paciente);
+  } catch (error) {
+    console.error('Error en debug:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -215,7 +243,6 @@ router.put('/:id', async (req, res) => {
     const { fecha, id_pago, link_llamada } = req.body;
     validarID(id);
 
-    // Verificar que la cita existe
     const citas = await query('SELECT id FROM citas WHERE id = ?', [id]);
     if (citas.length === 0) {
       return res.status(404).json({ error: "Cita no encontrada" });
@@ -262,7 +289,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// Citas de un médico - OPTIMIZADA
 router.get('/medico/:id', async (req, res) => {
   let connection;
   try {
