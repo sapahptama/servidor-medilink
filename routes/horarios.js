@@ -2,7 +2,6 @@ const { Router } = require('express');
 const router = Router();
 const { query } = require('../db');
 
-// ==================== VALIDADORES ====================
 
 const validarHorario = (data, campos) => {
   const faltantes = campos.filter(campo => !data[campo]);
@@ -31,7 +30,7 @@ const validarFechas = (fecha_inicio, fecha_fin) => {
 };
 
 const validarTipoConfiguracion = (tipo) => {
-  const tiposValidos = ['especifico', 'recurrente'];
+  const tiposValidos = ['especifico', 'recurrente', 'bloqueado'];
   if (!tiposValidos.includes(tipo)) {
     throw { status: 400, message: `Tipo debe ser: ${tiposValidos.join(', ')}` };
   }
@@ -49,7 +48,6 @@ const validarDiasSemana = (dias_semana) => {
   }
 };
 
-// ==================== CONVERSIONES DE FECHAS ====================
 
 // Convertir ISO a MySQL DATETIME
 const convertirAMySQLDatetime = (isoString) => {
@@ -89,10 +87,43 @@ const parsearHorario = (horario) => {
   if (horario.fecha_fin) {
     horarioParseado.fecha_fin = convertirAISO(horario.fecha_fin);
   }
+  if (horario.fecha_recurrencia_inicio) {
+    horarioParseado.fecha_recurrencia_inicio = convertirAISO(horario.fecha_recurrencia_inicio);
+  }
+  if (horario.fecha_recurrencia_fin) {
+    horarioParseado.fecha_recurrencia_fin = convertirAISO(horario.fecha_recurrencia_fin);
+  }
   return horarioParseado;
 };
 
-// ==================== CREAR HORARIO ====================
+
+const verificarSuperposicion = async (id_medico, fecha_inicio, fecha_fin, excluir_id = null) => {
+  try {
+    const condiciones = ['id_medico = ?', 'activo = TRUE'];
+    const parametros = [id_medico];
+    
+    // Convertir fechas a MySQL
+    const inicio_mysql = convertirAMySQLDatetime(fecha_inicio);
+    const fin_mysql = convertirAMySQLDatetime(fecha_fin);
+    
+    condiciones.push('((fecha_inicio < ? AND fecha_fin > ?) OR (fecha_inicio < ? AND fecha_fin > ?))');
+    parametros.push(fin_mysql, inicio_mysql, fin_mysql, inicio_mysql);
+    
+    if (excluir_id) {
+      condiciones.push('id != ?');
+      parametros.push(excluir_id);
+    }
+    
+    const queryStr = `SELECT * FROM horarios WHERE ${condiciones.join(' AND ')}`;
+    const horariosSuperpuestos = await query(queryStr, parametros);
+    
+    return horariosSuperpuestos.length > 0;
+  } catch (error) {
+    console.error('Error verificando superposición:', error);
+    throw error;
+  }
+};
+
 
 router.post('/', async (req, res) => {
   try {
@@ -123,12 +154,23 @@ router.post('/', async (req, res) => {
         });
       }
       validarDiasSemana(dias_semana);
+      
+      // Validar fechas de recurrencia
+      validarFechas(fecha_recurrencia_inicio, fecha_recurrencia_fin);
     }
 
     // Verificar que el médico existe
     const medicos = await query('SELECT id FROM medico WHERE id = ?', [id_medico]);
     if (medicos.length === 0) {
       return res.status(400).json({ error: "Médico no válido" });
+    }
+
+    // VERIFICAR SUPERPOSICIÓN CON HORARIOS EXISTENTES
+    const haySuperposicion = await verificarSuperposicion(id_medico, fecha_inicio, fecha_fin);
+    if (haySuperposicion) {
+      return res.status(400).json({ 
+        error: "Este horario se superpone con otro horario existente. Los horarios específicos tienen prioridad." 
+      });
     }
 
     // Convertir fechas ISO a formato MySQL
@@ -148,8 +190,8 @@ router.post('/', async (req, res) => {
         id_medico,
         tipo_configuracion,
         dias_semana_json,
-        fecha_recurrencia_inicio,
-        fecha_recurrencia_fin
+        fecha_recurrencia_inicio ? convertirAMySQLDatetime(fecha_recurrencia_inicio) : null,
+        fecha_recurrencia_fin ? convertirAMySQLDatetime(fecha_recurrencia_fin) : null
       ]
     );
 
@@ -165,7 +207,60 @@ router.post('/', async (req, res) => {
   }
 });
 
-// ==================== LISTAR HORARIOS ====================
+
+router.post('/bloquear', async (req, res) => {
+  try {
+    const { 
+      fecha_inicio, 
+      fecha_fin, 
+      id_medico,
+      motivo = "Horario bloqueado"
+    } = req.body;
+
+    // Validaciones básicas
+    validarHorario(
+      { fecha_inicio, fecha_fin, id_medico },
+      ['fecha_inicio', 'fecha_fin', 'id_medico']
+    );
+
+    validarFechas(fecha_inicio, fecha_fin);
+
+    // Verificar que el médico existe
+    const medicos = await query('SELECT id FROM medico WHERE id = ?', [id_medico]);
+    if (medicos.length === 0) {
+      return res.status(400).json({ error: "Médico no válido" });
+    }
+
+    // Verificar superposición
+    const haySuperposicion = await verificarSuperposicion(id_medico, fecha_inicio, fecha_fin);
+    if (haySuperposicion) {
+      return res.status(400).json({ 
+        error: "No se puede bloquear este horario porque se superpone con horarios existentes" 
+      });
+    }
+
+    // Insertar horario bloqueado (tipo 'bloqueado')
+    const fecha_inicio_mysql = convertirAMySQLDatetime(fecha_inicio);
+    const fecha_fin_mysql = convertirAMySQLDatetime(fecha_fin);
+    
+    const resultado = await query(
+      `INSERT INTO horarios 
+       (fecha_inicio, fecha_fin, id_medico, tipo_configuracion, motivo_bloqueo, activo) 
+       VALUES (?, ?, ?, 'bloqueado', ?, TRUE)`,
+      [fecha_inicio_mysql, fecha_fin_mysql, id_medico, motivo]
+    );
+
+    res.status(201).json({ 
+      message: "Horario bloqueado correctamente", 
+      id: resultado.insertId
+    });
+  } catch (err) {
+    console.error(err);
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: "Error al bloquear horario" });
+  }
+});
+
 
 router.get('/', async (req, res) => {
   try {
@@ -181,7 +276,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ==================== OBTENER HORARIO POR ID ====================
 
 router.get('/:id', async (req, res) => {
   try {
@@ -207,7 +301,6 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// ==================== OBTENER HORARIOS DE UN MÉDICO ====================
 
 router.get('/medico/:id', async (req, res) => {
   try {
@@ -291,7 +384,6 @@ router.get('/paciente/:id/activos', async (req, res) => {
   }
 });
 
-// ==================== OBTENER HORARIOS POR TIPO ====================
 
 router.get('/tipo/:tipo', async (req, res) => {
   try {
@@ -313,7 +405,6 @@ router.get('/tipo/:tipo', async (req, res) => {
   }
 });
 
-// ==================== ACTUALIZAR HORARIO ====================
 
 router.put('/:id', async (req, res) => {
   try {
@@ -396,7 +487,6 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// ==================== ELIMINAR HORARIO (Soft Delete) ====================
 
 router.delete('/:id', async (req, res) => {
   try {
@@ -420,7 +510,6 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// ==================== ELIMINAR HORARIO (Hard Delete - Solo admin) ====================
 
 router.delete('/admin/:id', async (req, res) => {
   try {
