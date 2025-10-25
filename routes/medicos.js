@@ -53,6 +53,56 @@ router.get("/", async (req, res) => {
   }
 });
 
+// En medicos.js, agregar este endpoint
+router.get('/:id/disponibilidad-completa', async (req, res) => {
+  try {
+    const { id } = req.params;
+    validarID(id);
+
+    // Verificar que el médico existe
+    const medicos = await query('SELECT id FROM medico WHERE id = ?', [id]);
+    if (medicos.length === 0) {
+      return res.status(404).json({ error: "Médico no encontrado" });
+    }
+
+    // Obtener todo en una sola consulta (más eficiente)
+    const [medicoData, horarios, citas] = await Promise.all([
+      query(`
+        SELECT m.*, u.nombre, u.apellido, u.email 
+        FROM medico m 
+        JOIN usuarios u ON m.id_usuario = u.id 
+        WHERE m.id = ?
+      `, [id]),
+      query(`
+        SELECT * FROM horarios 
+        WHERE id_medico = ? AND activo = TRUE AND fecha_fin > NOW() 
+        ORDER BY fecha_inicio ASC
+        LIMIT 100
+      `, [id]),
+      query(`
+        SELECT c.* 
+        FROM citas c
+        WHERE c.id_medico = ? AND c.fecha > NOW()
+        ORDER BY c.fecha DESC
+      `, [id])
+    ]);
+
+    if (medicoData.length === 0) {
+      return res.status(404).json({ error: "Médico no encontrado" });
+    }
+
+    res.json({
+      medico: medicoData[0],
+      horarios: horarios.map(parsearHorario),
+      citas: citas
+    });
+
+  } catch (err) {
+    console.error('Error en disponibilidad-completa:', err);
+    res.status(500).json({ error: "Error al obtener datos del médico" });
+  }
+});
+
 // Obtener médico por ID
 router.get("/:id", async (req, res) => {
   try {
