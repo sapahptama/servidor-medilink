@@ -152,6 +152,24 @@ router.post('/', async (req, res) => {
       query('SELECT id FROM medico WHERE id = ?', [id_medico])
     ]);
 
+    const horariosDisponibles = await query(`
+  SELECT h.* FROM horarios h
+  LEFT JOIN citas c ON (
+    c.id_medico = h.id_medico 
+    AND c.fecha BETWEEN DATE_SUB(?, INTERVAL 29 MINUTE) AND DATE_ADD(?, INTERVAL 29 MINUTE)
+    AND c.id != ?
+  )
+  WHERE h.id_medico = ? 
+  AND h.activo = TRUE
+  AND h.fecha_inicio <= ? 
+  AND h.fecha_fin >= ?
+  AND c.id IS NULL
+`, [fecha, fecha, 0, id_medico, fecha, fecha]);
+
+    if (horariosDisponibles.length === 0) {
+      return res.status(400).json({ error: "El horario seleccionado no está disponible" });
+    }
+
     if (pacientes.length === 0) {
       return res.status(400).json({ error: "Paciente no válido" });
     }
