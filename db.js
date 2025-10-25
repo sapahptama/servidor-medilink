@@ -10,65 +10,53 @@ const pool = mysql.createPool({
   timeout: 60000,
   multipleStatements: false,
   waitForConnections: true,
-  queueLimit: 10,
+  queueLimit: 5,
   connectTimeout: 10000,
+  charset: 'utf8mb4',
+  timezone: 'local',
+  idleTimeout: 40000,
 });
 
 pool.on('error', (err) => {
   console.error("❌ Error en el pool de conexiones:", err.message);
 });
 
-pool.getConnection((err, connection) => {
-  if (err) {
-    console.error("❌ Error al conectar a la base de datos:", err.message);
-  } else {
-    console.log("✅ Conectado al pool de MySQL correctamente");
-    connection.release();
-  }
+pool.on('acquire', (connection) => {
+  console.log('🔗 Conexión adquirida del pool');
+});
+
+pool.on('release', (connection) => {
+  console.log('🔄 Conexión liberada al pool');
+});
+
+pool.on('enqueue', () => {
+  console.log('⏳ Esperando por conexión disponible...');
 });
 
 const query = (sql, args = []) => {
   return new Promise((resolve, reject) => {
     pool.query(sql, args, (err, results) => {
-      if (err) return reject(err);
+      if (err) {
+        console.error('❌ Error en query:', err.message);
+        console.error('Query:', sql);
+        console.error('Params:', args);
+        return reject(err);
+      }
       resolve(results);
     });
   });
 };
 
-const transaction = async (callback) => {
+const getConnection = () => {
   return new Promise((resolve, reject) => {
     pool.getConnection((err, connection) => {
-      if (err) return reject(err);
-
-      connection.beginTransaction((err) => {
-        if (err) {
-          connection.release();
-          return reject(err);
-        }
-
-        callback(connection)
-          .then(() => {
-            connection.commit((err) => {
-              if (err) {
-                return connection.rollback(() => {
-                  connection.release();
-                  reject(err);
-                });
-              }
-              connection.release();
-              resolve();
-            });
-          })
-          .catch((error) => {
-            connection.rollback(() => {
-              connection.release();
-              reject(error);
-            });
-          });
-      });
+      if (err) {
+        console.error('❌ Error al obtener conexión:', err.message);
+        return reject(err);
+      }
+      resolve(connection);
     });
   });
 };
 
-module.exports = { pool, query, transaction };
+module.exports = { pool, query, getConnection, transaction };
