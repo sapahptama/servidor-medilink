@@ -10,6 +10,47 @@ const validarMedico = (data, campos) => {
   }
 };
 
+const convertirAISO = (mysqlDatetime) => {
+  if (!mysqlDatetime) return null;
+  const fecha = new Date(mysqlDatetime);
+  if (isNaN(fecha.getTime())) return null;
+  return fecha.toISOString();
+};
+
+// Parsear horario de BD y convertir fechas
+const parsearHorario = (horario) => {
+  const horarioParseado = { ...horario };
+  if (horario.dias_semana && typeof horario.dias_semana === 'string') {
+    try {
+      horarioParseado.dias_semana = JSON.parse(horario.dias_semana);
+    } catch (e) {
+      console.error('Error parseando días semana:', e);
+      horarioParseado.dias_semana = {};
+    }
+  }
+  // Convertir fechas MySQL a ISO
+  if (horario.fecha_inicio) {
+    horarioParseado.fecha_inicio = convertirAISO(horario.fecha_inicio);
+  }
+  if (horario.fecha_fin) {
+    horarioParseado.fecha_fin = convertirAISO(horario.fecha_fin);
+  }
+  if (horario.fecha_recurrencia_inicio) {
+    horarioParseado.fecha_recurrencia_inicio = convertirAISO(horario.fecha_recurrencia_inicio);
+  }
+  if (horario.fecha_recurrencia_fin) {
+    horarioParseado.fecha_recurrencia_fin = convertirAISO(horario.fecha_recurrencia_fin);
+  }
+  return horarioParseado;
+};
+
+// Validar ID
+const validarID = (id) => {
+  if (!id || isNaN(id)) {
+    throw { status: 400, message: "ID inválido" };
+  }
+};
+
 router.get("/", async (req, res) => {
   try {
     const medicos = await query(`
@@ -53,7 +94,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// En medicos.js, agregar este endpoint
+// Endpoint optimizado para disponibilidad completa
 router.get('/:id/disponibilidad-completa', async (req, res) => {
   try {
     const { id } = req.params;

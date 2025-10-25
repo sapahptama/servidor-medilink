@@ -14,7 +14,7 @@ const pool = mysql.createPool({
   connectTimeout: 10000,
   charset: 'utf8mb4',
   timezone: 'local',
-  idleTimeout: 40000,
+  idleTimeout: 60000,
 });
 
 pool.on('error', (err) => {
@@ -58,5 +58,63 @@ const getConnection = () => {
     });
   });
 };
+
+// FUNCIÓN TRANSACTION CORREGIDA
+const transaction = async (callback) => {
+  const connection = await getConnection();
+  
+  return new Promise(async (resolve, reject) => {
+    try {
+      await new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+
+      // Ejecutar el callback con la conexión
+      await callback(connection);
+
+      // Commit de la transacción
+      await new Promise((resolve, reject) => {
+        connection.commit((err) => {
+          if (err) {
+            return connection.rollback(() => {
+              reject(err);
+            });
+          }
+          resolve();
+        });
+      });
+
+      connection.release();
+      resolve();
+    } catch (error) {
+      // Rollback en caso de error
+      await new Promise((resolve) => {
+        connection.rollback(() => {
+          resolve();
+        });
+      });
+      connection.release();
+      reject(error);
+    }
+  });
+};
+
+// Función para verificar la conexión inicial
+const verificarConexion = async () => {
+  try {
+    const connection = await getConnection();
+    console.log("✅ Conectado al pool de MySQL correctamente");
+    connection.release();
+    return true;
+  } catch (err) {
+    console.error("❌ Error al conectar a la base de datos:", err.message);
+    return false;
+  }
+};
+
+verificarConexion();
 
 module.exports = { pool, query, getConnection, transaction };
