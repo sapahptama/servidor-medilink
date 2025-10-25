@@ -327,7 +327,6 @@ router.get('/medico/:id', async (req, res) => {
   }
 });
 
-// Obtener horarios activos de un médico - OPTIMIZADA
 router.get('/medico/:id/activos', async (req, res) => {
   try {
     const { id } = req.params;
@@ -339,11 +338,19 @@ router.get('/medico/:id/activos', async (req, res) => {
       return res.status(404).json({ error: "Médico no encontrado" });
     }
 
+    // MODIFICADO: Incluir horarios recurrentes vigentes
     const horarios = await query(
       `SELECT * FROM horarios 
-       WHERE id_medico = ? AND activo = TRUE AND fecha_fin > NOW() 
+       WHERE id_medico = ? AND activo = TRUE 
+       AND (
+         (tipo_configuracion = 'especifico' AND fecha_fin > NOW()) 
+         OR 
+         (tipo_configuracion = 'recurrente' AND fecha_recurrencia_fin > NOW())
+         OR
+         (tipo_configuracion = 'bloqueado' AND fecha_fin > NOW())
+       )
        ORDER BY fecha_inicio ASC
-       LIMIT 100`, // Limitar resultados
+       LIMIT 200`, // Aumentar límite para recurrentes
       [id]
     );
 
