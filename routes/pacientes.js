@@ -190,17 +190,22 @@ router.get("/medico/:id/pacientes", async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Obtenemos todos los pacientes que han tenido citas con ese médico
     const pacientes = await query(
       `
       SELECT DISTINCT 
-        p.id AS id_paciente,
-        p.nombre AS paciente_nombre,
-        p.apellido AS paciente_apellido,
-        p.email AS paciente_email
+        u.id AS id_usuario,
+        u.nombre AS nombre,
+        u.apellido AS apellido,
+        u.correo AS correo,
+        u.telefono AS telefono,
+        p.eps AS eps,
+        p.enfermedades AS enfermedades
       FROM citas c
-      JOIN usuarios p ON c.id_paciente = p.id
+      JOIN pacientes p ON c.id_paciente = p.id
+      JOIN usuarios u ON p.id_usuario = u.id
       WHERE c.id_medico = ?
-      ORDER BY p.nombre ASC
+      ORDER BY u.nombre ASC
       `,
       [id]
     );
@@ -211,6 +216,5 @@ router.get("/medico/:id/pacientes", async (req, res) => {
     res.status(500).json({ error: "Error al obtener pacientes del médico" });
   }
 });
-
 
 module.exports = router;
