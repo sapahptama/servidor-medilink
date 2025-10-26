@@ -17,33 +17,30 @@ const validarID = (id) => {
   }
 };
 
-// Crear registro médico
+// Crear registro médico vinculado a una cita
 router.post('/', async (req, res) => {
   try {
-    const { id_paciente, id_medico, notas } = req.body;
+    const { id_paciente, id_medico, id_cita, notas } = req.body;
 
     validarRegistro(
-      { id_paciente, id_medico },
-      ['id_paciente', 'id_medico']
+      { id_paciente, id_medico, id_cita },
+      ['id_paciente', 'id_medico', 'id_cita']
     );
 
-    // Verificar que paciente y médico existen
-    const [pacientes, medicos] = await Promise.all([
+    // Verificar existencia de entidades
+    const [pacientes, medicos, citas] = await Promise.all([
       query('SELECT id FROM pacientes WHERE id = ?', [id_paciente]),
-      query('SELECT id FROM medico WHERE id = ?', [id_medico])
+      query('SELECT id FROM medico WHERE id = ?', [id_medico]),
+      query('SELECT id FROM citas WHERE id = ?', [id_cita]),
     ]);
 
-    if (pacientes.length === 0) {
-      return res.status(400).json({ error: "Paciente no válido" });
-    }
-
-    if (medicos.length === 0) {
-      return res.status(400).json({ error: "Médico no válido" });
-    }
+    if (pacientes.length === 0) return res.status(400).json({ error: "Paciente no válido" });
+    if (medicos.length === 0) return res.status(400).json({ error: "Médico no válido" });
+    if (citas.length === 0) return res.status(400).json({ error: "Cita no válida" });
 
     const resultado = await query(
-      'INSERT INTO registros (id_paciente, id_medico, notas) VALUES (?, ?, ?)',
-      [id_paciente, id_medico, notas || null]
+      'INSERT INTO registros (id_paciente, id_medico, id_cita, notas) VALUES (?, ?, ?, ?)',
+      [id_paciente, id_medico, id_cita, notas || null]
     );
 
     res.status(201).json({ message: "Registro creado correctamente", id: resultado.insertId });
@@ -53,6 +50,35 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: "Error al crear registro" });
   }
 });
+
+// Obtener registro por cita
+router.get('/cita/:id_cita', async (req, res) => {
+  try {
+    const { id_cita } = req.params;
+    validarID(id_cita);
+
+    const registros = await query(`
+      SELECT r.*, 
+             u.nombre AS medico_nombre, 
+             u.apellido AS medico_apellido
+      FROM registros r
+      JOIN medico m ON r.id_medico = m.id
+      JOIN usuarios u ON m.id_usuario = u.id
+      WHERE r.id_cita = ?
+      ORDER BY r.id DESC
+    `, [id_cita]);
+
+    if (registros.length === 0) {
+      return res.json([]); // no error, simplemente sin nota aún
+    }
+
+    res.json(registros[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Error al obtener nota médica de la cita" });
+  }
+});
+
 
 // Obtener registros de un paciente
 router.get('/paciente/:id', async (req, res) => {
@@ -72,7 +98,7 @@ router.get('/paciente/:id', async (req, res) => {
       JOIN medico m ON r.id_medico = m.id
       JOIN usuarios u ON m.id_usuario = u.id
       WHERE r.id_paciente = ?
-      ORDER BY r.fecha_creacion DESC
+      ORDER BY r.id DESC
     `, [id]);
 
     res.json(registros);
