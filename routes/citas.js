@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const router = Router();
 const { query } = require('../db');
+const { DateTime } = require("luxon")
 
 // Validar campos obligatorios
 const validarCita = (data, campos) => {
@@ -171,7 +172,7 @@ router.post('/', async (req, res) => {
       [id_medico]
     );
 
-    const fechaCita = new Date(fecha); // ✅ Mantiene hora local (Colombia)
+    const fechaCita = DateTime.fromSQL(fecha, { zone: "America/Bogota" }).toJSDate();
     const fechaFinCita = new Date(fechaCita.getTime() + 30 * 60 * 1000);
 
 
@@ -235,17 +236,20 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: "El médico no tiene horario disponible en este momento. Verifica los horarios configurados." });
     }
 
-    // Insertar cita
-    const resultado = await query(
-      'INSERT INTO citas (id_paciente, id_medico, fecha, id_pago, link_llamada) VALUES (?, ?, ?, ?, ?)',
-      [id_paciente, id_medico, fecha, id_pago || null, link_llamada || null]
-    );
+    const fechaBogota = DateTime.fromSQL(fecha, { zone: "America/Bogota" });
+    const fechaFinal = fechaBogota.toFormat("yyyy-LL-dd HH:mm:ss");
 
+
+    const result = await query(
+      'INSERT INTO citas (id_paciente, id_medico, fecha, id_pago, link_llamada) VALUES (?, ?, ?, ?, ?)',
+      [id_paciente, id_medico, fechaFinal, id_pago || null, link_llamada || null]
+    );
 
     res.status(201).json({
       message: "Cita creada correctamente",
-      id: resultado.insertId
+      id: result.insertId
     });
+
   } catch (err) {
     console.error('❌ Error al crear cita:', err);
     if (err.status) return res.status(err.status).json({ error: err.message });
