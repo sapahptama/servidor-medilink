@@ -143,12 +143,6 @@ router.post('/', async (req, res) => {
   try {
     const { id_paciente, id_medico, fecha, id_pago, link_llamada } = req.body;
 
-    console.log('=== DATOS RECIBIDOS PARA CITA ===');
-    console.log('ID Paciente:', id_paciente, 'Tipo:', typeof id_paciente);
-    console.log('ID Médico:', id_medico, 'Tipo:', typeof id_medico);
-    console.log('Fecha recibida:', fecha);
-    console.log('==============================');
-
     validarCita({ id_paciente, id_medico, fecha }, ['id_paciente', 'id_medico', 'fecha']);
 
     // Verificar que paciente existe
@@ -159,19 +153,14 @@ router.post('/', async (req, res) => {
     `, [id_paciente]);
 
     if (pacientes.length === 0) {
-      console.log('Paciente no encontrado en BD. ID buscado:', id_paciente);
       return res.status(400).json({ error: "Paciente no válido" });
     }
 
     // Verificar que médico existe
     const medicos = await query('SELECT id FROM medico WHERE id = ?', [id_medico]);
     if (medicos.length === 0) {
-      console.log('Médico no encontrado:', id_medico);
       return res.status(400).json({ error: "Médico no válido" });
     }
-
-    // DIAGNÓSTICO DETALLADO DE HORARIOS
-    console.log('=== DIAGNÓSTICO DE HORARIOS DEL MÉDICO ===');
 
     // Consultar TODOS los horarios del médico para debug
     const todosHorariosMedico = await query(
@@ -182,17 +171,8 @@ router.post('/', async (req, res) => {
       [id_medico]
     );
 
-    console.log('Todos los horarios activos del médico:', todosHorariosMedico);
-    console.log('Fecha de la cita recibida:', fecha);
-
-    // CORRECCIÓN: Usar la fecha tal como viene, sin conversión UTC
     const fechaCita = new Date(fecha + 'Z'); // Agregar 'Z' para indicar que es UTC
     const fechaFinCita = new Date(fechaCita.getTime() + 30 * 60 * 1000);
-
-    console.log('Fecha cita (local):', fechaCita.toString());
-    console.log('Fecha fin cita (local):', fechaFinCita.toString());
-    console.log('Fecha cita (ISO):', fechaCita.toISOString());
-    console.log('Fecha fin cita (ISO):', fechaFinCita.toISOString());
 
     // Verificar que no hay citas existentes en ese horario
     const citasExistentes = await query(
@@ -202,12 +182,8 @@ router.post('/', async (req, res) => {
     );
 
     if (citasExistentes.length > 0) {
-      console.log('Cita existente encontrada:', citasExistentes);
       return res.status(400).json({ error: "Ya existe una cita en este horario" });
     }
-
-    // VERIFICACIÓN CORREGIDA: Usar formato directo sin conversión UTC
-    console.log('Buscando horarios para:', fecha, 'a', fechaFinCita.toISOString().slice(0, 19).replace('T', ' '));
 
     const horariosDisponibles = await query(
       `SELECT id, tipo_configuracion, fecha_inicio, fecha_fin 
@@ -224,11 +200,7 @@ router.post('/', async (req, res) => {
       [id_medico, fecha, fecha.split(' ')[0] + ' 00:00:00']
     );
 
-    console.log('Horarios disponibles encontrados:', horariosDisponibles);
-
-    // VERIFICACIÓN TEMPORAL: Si no hay horarios, mostrar qué horarios sí existen
     if (horariosDisponibles.length === 0) {
-      console.log('=== ANÁLISIS DE HORARIOS EXISTENTES ===');
       
       // Mostrar horarios específicos
       const horariosEspecificos = await query(
@@ -237,7 +209,6 @@ router.post('/', async (req, res) => {
          WHERE id_medico = ? AND activo = TRUE AND tipo_configuracion = 'especifico'`,
         [id_medico]
       );
-      console.log('Horarios específicos del médico:', horariosEspecificos);
 
       // Mostrar horarios recurrentes
       const horariosRecurrentes = await query(
@@ -246,20 +217,15 @@ router.post('/', async (req, res) => {
          WHERE id_medico = ? AND activo = TRUE AND tipo_configuracion = 'recurrente'`,
         [id_medico]
       );
-      console.log('Horarios recurrentes del médico:', horariosRecurrentes);
 
       // Verificar si la fecha cae en un horario recurrente
       const fechaCitaObj = new Date(fecha);
       const diaSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'][fechaCitaObj.getDay()];
-      console.log('Día de la semana de la cita:', diaSemana);
 
       for (let horario of horariosRecurrentes) {
         try {
           const dias = typeof horario.dias_semana === 'string' ? JSON.parse(horario.dias_semana) : horario.dias_semana;
-          console.log(`Horario recurrente ${horario.id}:`, dias);
-          if (dias[diaSemana]) {
-            console.log(`✅ La cita cae en un día recurrente activo: ${diaSemana}`);
-          }
+
         } catch (e) {
           console.log('Error parseando días:', e);
         }
@@ -274,7 +240,6 @@ router.post('/', async (req, res) => {
       [id_paciente, id_medico, fecha, id_pago || null, link_llamada || null]
     );
 
-    console.log('✅ Cita creada exitosamente. ID:', resultado.insertId);
 
     res.status(201).json({ 
       message: "Cita creada correctamente", 
@@ -290,7 +255,6 @@ router.post('/', async (req, res) => {
 router.get('/debug/paciente/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    console.log('Buscando paciente para usuario ID:', userId);
     
     const paciente = await query(`
       SELECT p.*, u.nombre, u.apellido 
@@ -299,7 +263,6 @@ router.get('/debug/paciente/:userId', async (req, res) => {
       WHERE p.id_usuario = ?
     `, [userId]);
     
-    console.log('Resultado de búsqueda:', paciente);
     res.json(paciente);
   } catch (error) {
     console.error('Error en debug:', error);
