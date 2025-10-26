@@ -1,147 +1,109 @@
 const { Router } = require('express');
 const router = Router();
-const { query } = require('../db');
+const pool = require('../db');
 
-// Validar campos obligatorios
-const validarChat = (data, campos) => {
-  const faltantes = campos.filter(campo => !data[campo]);
-  if (faltantes.length > 0) {
-    throw { status: 400, message: `Campos obligatorios: ${faltantes.join(', ')}` };
-  }
-};
-
-// Validar IDs numéricos
-const validarID = (id) => {
-  if (!id || isNaN(id)) {
-    throw { status: 400, message: "ID inválido" };
-  }
-};
-
-// Crear chat
-router.post('/', async (req, res) => {
+// Obtener chats de un usuario (paciente o médico)
+router.get('/usuario/:userId/tipo/:tipo', async (req, res) => {
+  const { userId, tipo } = req.params;
+  
   try {
-    const { id_paciente, id_medico } = req.body;
-
-    validarChat({ id_paciente, id_medico }, ['id_paciente', 'id_medico']);
-
-    // Verificar que paciente y médico existen
-    const [pacientes, medicos] = await Promise.all([
-      query('SELECT id FROM pacientes WHERE id = ?', [id_paciente]),
-      query('SELECT id FROM medico WHERE id = ?', [id_medico])
-    ]);
-
-    if (pacientes.length === 0) {
-      return res.status(400).json({ error: "Paciente no válido" });
+    let query;
+    if (tipo === 'paciente') {
+      query = `
+        SELECT 
+          c.id, c.id_paciente, c.id_medico,
+          c.ultimo_mensaje, c.fecha_ultimo_mensaje,
+          c.no_leidos_paciente as no_leidos,
+          m.nombre as medico_nombre,
+          m.apellido as medico_apellido,
+          e.nombre as especialidad
+        FROM chats c
+        JOIN medicos m ON c.id_medico = m.id
+        LEFT JOIN especialidades e ON m.id_especialidad = e.id
+        WHERE c.id_paciente = $1
+        ORDER BY c.fecha_ultimo_mensaje DESC
+      `;
+    } else {
+      query = `
+        SELECT 
+          c.id, c.id_paciente, c.id_medico,
+          c.ultimo_mensaje, c.fecha_ultimo_mensaje,
+          c.no_leidos_medico as no_leidos,
+          u.nombre as paciente_nombre,
+          u.apellido as paciente_apellido
+        FROM chats c
+        JOIN pacientes p ON c.id_paciente = p.id_paciente
+        JOIN usuarios u ON p.id_usuario = u.id
+        WHERE c.id_medico = $1
+        ORDER BY c.fecha_ultimo_mensaje DESC
+      `;
     }
+    
+    const result = await pool.query(query, [userId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Error al obtener chats:', err);
+    res.status(500).json({ error: 'Error al cargar chats' });
+  }
+});
 
-    if (medicos.length === 0) {
-      return res.status(400).json({ error: "Médico no válido" });
-    }
-
-    // Verificar si ya existe un chat entre estos dos
-    const chatExistente = await query(
-      'SELECT id FROM chats WHERE id_paciente = ? AND id_medico = ?',
+// Obtener o crear chat entre paciente y médico
+router.post('/obtener-o-crear', async (req, res) => {
+  const { id_paciente, id_medico } = req.body;
+  
+  try {
+    // Verificar si existe el chat
+    let result = await pool.query(
+      'SELECT * FROM chats WHERE id_paciente = $1 AND id_medico = $2',
       [id_paciente, id_medico]
     );
-
-    if (chatExistente.length > 0) {
-      return res.status(400).json({ error: "Ya existe un chat entre este paciente y médico" });
+    
+    if (result.rows.length > 0) {
+      return res.json(result.rows[0]);
     }
-
-    const resultado = await query(
-      'INSERT INTO chats (id_paciente, id_medico) VALUES (?, ?)',
+    
+    // Crear nuevo chat
+    result = await pool.query(
+      `INSERT INTO chats (id_paciente, id_medico) 
+       VALUES ($1, $2) 
+       RETURNING *`,
       [id_paciente, id_medico]
     );
-
-    res.status(201).json({ message: "Chat creado correctamente", id: resultado.insertId });
+    
+    res.json(result.rows[0]);
   } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al crear chat" });
+    console.error('Error al obtener/crear chat:', err);
+    res.status(500).json({ error: 'Error al crear chat' });
   }
 });
 
-// Obtener chat por ID
-router.get('/:id', async (req, res) => {
+// Marcar mensajes como leídos
+router.put('/:chatId/marcar-leidos/:tipoUsuario', async (req, res) => {
+  const { chatId, tipoUsuario } = req.params;
+  
   try {
-    const { id } = req.params;
-    validarID(id);
-
-    const chats = await query('SELECT * FROM chats WHERE id = ?', [id]);
-
-    if (chats.length === 0) {
-      return res.status(404).json({ error: "Chat no encontrado" });
-    }
-
-    res.json(chats[0]);
+    // Actualizar contador de no leídos
+    const campo = tipoUsuario === 'paciente' 
+      ? 'no_leidos_paciente' 
+      : 'no_leidos_medico';
+    
+    await pool.query(
+      `UPDATE chats SET ${campo} = 0 WHERE id = $1`,
+      [chatId]
+    );
+    
+    // Marcar mensajes como leídos
+    await pool.query(
+      `UPDATE mensajes 
+       SET leido = true 
+       WHERE id_chat = $1 AND tipo_emisor != $2`,
+      [chatId, tipoUsuario]
+    );
+    
+    res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al obtener chat" });
-  }
-});
-
-// Chats como paciente
-router.get('/paciente/:id/mis-chats', async (req, res) => {
-  try {
-    const { id } = req.params;
-    validarID(id);
-
-    const chats = await query(`
-      SELECT c.*, u.nombre AS medico_nombre, u.apellido AS medico_apellido
-      FROM chats c
-      JOIN medico m ON c.id_medico = m.id
-      JOIN usuarios u ON m.id_usuario = u.id
-      WHERE c.id_paciente = ?
-    `, [id]);
-
-    res.json(chats);
-  } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al obtener chats del paciente" });
-  }
-});
-
-// Chats como médico
-router.get('/medico/:id/mis-chats', async (req, res) => {
-  try {
-    const { id } = req.params;
-    validarID(id);
-
-    const chats = await query(`
-      SELECT c.*, u.nombre AS paciente_nombre, u.apellido AS paciente_apellido
-      FROM chats c
-      JOIN pacientes p ON c.id_paciente = p.id
-      JOIN usuarios u ON p.id_usuario = u.id
-      WHERE c.id_medico = ?
-    `, [id]);
-
-    res.json(chats);
-  } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al obtener chats del médico" });
-  }
-});
-
-// Eliminar chat
-router.delete('/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    validarID(id);
-
-    const resultado = await query('DELETE FROM chats WHERE id = ?', [id]);
-
-    if (resultado.affectedRows === 0) {
-      return res.status(404).json({ error: "Chat no encontrado" });
-    }
-
-    res.json({ message: "Chat eliminado correctamente" });
-  } catch (err) {
-    console.error(err);
-    if (err.status) return res.status(err.status).json({ error: err.message });
-    res.status(500).json({ error: "Error al eliminar chat" });
+    console.error('Error al marcar leídos:', err);
+    res.status(500).json({ error: 'Error al actualizar' });
   }
 });
 
