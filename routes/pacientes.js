@@ -186,4 +186,30 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// ✅ Obtener todos los pacientes únicos atendidos por un médico
+router.get("/medico/:id/pacientes", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const query = `
+      SELECT DISTINCT 
+        p.id AS id_paciente,
+        p.nombre AS paciente_nombre,
+        p.apellido AS paciente_apellido,
+        p.email AS paciente_email
+      FROM citas c
+      JOIN usuarios p ON c.id_paciente = p.id
+      WHERE c.id_medico = ?
+      ORDER BY p.nombre ASC;
+    `;
+
+    const pacientes = await db.all(query, [id]);
+    res.json(pacientes);
+  } catch (err) {
+    console.error("Error al obtener pacientes del médico:", err);
+    res.status(500).json({ error: "Error al obtener pacientes" });
+  }
+});
+
+
 module.exports = router;
