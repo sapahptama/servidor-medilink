@@ -186,24 +186,28 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// ✅ /routes/pacientes.js
 router.get("/medico/:id/pacientes", async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Obtenemos todos los pacientes que han tenido citas con ese médico
     const pacientes = await query(
       `
       SELECT DISTINCT 
         u.id AS id_usuario,
-        u.nombre AS nombre,
-        u.apellido AS apellido,
-        u.correo AS correo,
-        u.telefono AS telefono,
-        p.eps AS eps,
-        p.enfermedades AS enfermedades
+        u.nombre,
+        u.apellido,
+        u.correo,
+        u.telefono,
+        u.numero_documento,
+        u.fecha_nacimiento,
+        u.tipo_sangre,
+        p.id AS id_paciente,
+        p.eps,
+        p.enfermedades
       FROM citas c
-      JOIN pacientes p ON c.id_paciente = p.id
-      JOIN usuarios u ON p.id_usuario = u.id
+      INNER JOIN pacientes p ON c.id_paciente = p.id
+      INNER JOIN usuarios u ON p.id_usuario = u.id
       WHERE c.id_medico = ?
       ORDER BY u.nombre ASC
       `,
@@ -216,5 +220,6 @@ router.get("/medico/:id/pacientes", async (req, res) => {
     res.status(500).json({ error: "Error al obtener pacientes del médico" });
   }
 });
+
 
 module.exports = router;
