@@ -171,8 +171,9 @@ router.post('/', async (req, res) => {
       [id_medico]
     );
 
-    const fechaCita = new Date(fecha + 'Z'); // Agregar 'Z' para indicar que es UTC
+    const fechaCita = new Date(fecha); // ✅ Mantiene hora local (Colombia)
     const fechaFinCita = new Date(fechaCita.getTime() + 30 * 60 * 1000);
+
 
     // Verificar que no hay citas existentes en ese horario
     const citasExistentes = await query(
@@ -201,7 +202,7 @@ router.post('/', async (req, res) => {
     );
 
     if (horariosDisponibles.length === 0) {
-      
+
       // Mostrar horarios específicos
       const horariosEspecificos = await query(
         `SELECT id, fecha_inicio, fecha_fin 
@@ -230,7 +231,7 @@ router.post('/', async (req, res) => {
           console.log('Error parseando días:', e);
         }
       }
-      
+
       return res.status(400).json({ error: "El médico no tiene horario disponible en este momento. Verifica los horarios configurados." });
     }
 
@@ -241,9 +242,9 @@ router.post('/', async (req, res) => {
     );
 
 
-    res.status(201).json({ 
-      message: "Cita creada correctamente", 
-      id: resultado.insertId 
+    res.status(201).json({
+      message: "Cita creada correctamente",
+      id: resultado.insertId
     });
   } catch (err) {
     console.error('❌ Error al crear cita:', err);
@@ -255,14 +256,14 @@ router.post('/', async (req, res) => {
 router.get('/debug/paciente/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     const paciente = await query(`
       SELECT p.*, u.nombre, u.apellido 
       FROM pacientes p 
       JOIN usuarios u ON p.id_usuario = u.id 
       WHERE p.id_usuario = ?
     `, [userId]);
-    
+
     res.json(paciente);
   } catch (error) {
     console.error('Error en debug:', error);
