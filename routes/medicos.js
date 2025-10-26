@@ -2,7 +2,6 @@ const { Router } = require("express");
 const router = Router();
 const { query, transaction } = require("../db");
 
-// Validar campos obligatorios
 const validarMedico = (data, campos) => {
   const faltantes = campos.filter((campo) => !data[campo]);
   if (faltantes.length > 0) {
@@ -17,40 +16,41 @@ const convertirAISO = (mysqlDatetime) => {
   return fecha.toISOString();
 };
 
-// Parsear horario de BD y convertir fechas
 const parsearHorario = (horario) => {
-  const horarioParseado = { ...horario };
-  if (horario.dias_semana && typeof horario.dias_semana === 'string') {
+  const h = { ...horario };
+  if (h.dias_semana && typeof h.dias_semana === "string") {
     try {
-      horarioParseado.dias_semana = JSON.parse(horario.dias_semana);
-    } catch (e) {
-      console.error('Error parseando días semana:', e);
-      horarioParseado.dias_semana = {};
+      h.dias_semana = JSON.parse(h.dias_semana);
+    } catch {
+      h.dias_semana = {};
     }
   }
-  // Convertir fechas MySQL a ISO
-  if (horario.fecha_inicio) {
-    horarioParseado.fecha_inicio = convertirAISO(horario.fecha_inicio);
-  }
-  if (horario.fecha_fin) {
-    horarioParseado.fecha_fin = convertirAISO(horario.fecha_fin);
-  }
-  if (horario.fecha_recurrencia_inicio) {
-    horarioParseado.fecha_recurrencia_inicio = convertirAISO(horario.fecha_recurrencia_inicio);
-  }
-  if (horario.fecha_recurrencia_fin) {
-    horarioParseado.fecha_recurrencia_fin = convertirAISO(horario.fecha_recurrencia_fin);
-  }
-  return horarioParseado;
+  if (h.fecha_inicio) h.fecha_inicio = convertirAISO(h.fecha_inicio);
+  if (h.fecha_fin) h.fecha_fin = convertirAISO(h.fecha_fin);
+  if (h.fecha_recurrencia_inicio)
+    h.fecha_recurrencia_inicio = convertirAISO(h.fecha_recurrencia_inicio);
+  if (h.fecha_recurrencia_fin)
+    h.fecha_recurrencia_fin = convertirAISO(h.fecha_recurrencia_fin);
+  return h;
 };
 
-// Validar ID
 const validarID = (id) => {
-  if (!id || isNaN(id)) {
-    throw { status: 400, message: "ID inválido" };
-  }
+  if (!id || isNaN(id)) throw { status: 400, message: "ID inválido" };
 };
 
+const convertirBufferAImagen = (buffer) => {
+  if (!buffer || !buffer.length) return null;
+  const inicio = buffer[0];
+  let mime = "image/png";
+  if (inicio === 0xff) mime = "image/jpeg";
+  else if (inicio === 0x89) mime = "image/png";
+  else if (inicio === 0x47) mime = "image/gif";
+  else if (inicio === 0x42) mime = "image/bmp";
+  const base64 = Buffer.from(buffer).toString("base64");
+  return `data:${mime};base64,${base64}`;
+};
+
+// Obtener todos los médicos
 router.get("/", async (req, res) => {
   try {
     const medicos = await query(`
@@ -75,17 +75,10 @@ router.get("/", async (req, res) => {
       JOIN usuarios u ON m.id_usuario = u.id
     `);
 
-    // 🔹 Convertir las fotos (BLOB) a base64 URL
-    const medicosConFotos = medicos.map((m) => {
-      if (m.foto_perfil) {
-        const base64 = Buffer.from(m.foto_perfil).toString("base64");
-        m.foto_perfil = `data:image/png;base64,${base64}`;
-      } else {
-        // Si no tiene foto, puede venir nulo
-        m.foto_perfil = null;
-      }
-      return m;
-    });
+    const medicosConFotos = medicos.map((m) => ({
+      ...m,
+      foto_perfil: convertirBufferAImagen(m.foto_perfil),
+    }));
 
     res.json(medicosConFotos);
   } catch (err) {
@@ -94,64 +87,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Endpoint optimizado para disponibilidad completa
-router.get('/:id/disponibilidad-completa', async (req, res) => {
-  try {
-    const { id } = req.params;
-    validarID(id);
-
-    // Verificar que el médico existe
-    const medicos = await query('SELECT id FROM medico WHERE id = ?', [id]);
-    if (medicos.length === 0) {
-      return res.status(404).json({ error: "Médico no encontrado" });
-    }
-
-    // Obtener todo en una sola consulta (más eficiente)
-    const [medicoData, horarios, citas] = await Promise.all([
-      query(`
-        SELECT m.*, u.nombre, u.apellido, u.email 
-        FROM medico m 
-        JOIN usuarios u ON m.id_usuario = u.id 
-        WHERE m.id = ?
-      `, [id]),
-      query(`
-        SELECT * FROM horarios 
-        WHERE id_medico = ? AND activo = TRUE AND fecha_fin > NOW() 
-        ORDER BY fecha_inicio ASC
-        LIMIT 100
-      `, [id]),
-      query(`
-        SELECT c.* 
-        FROM citas c
-        WHERE c.id_medico = ? AND c.fecha > NOW()
-        ORDER BY c.fecha DESC
-      `, [id])
-    ]);
-
-    if (medicoData.length === 0) {
-      return res.status(404).json({ error: "Médico no encontrado" });
-    }
-
-    res.json({
-      medico: medicoData[0],
-      horarios: horarios.map(parsearHorario),
-      citas: citas
-    });
-
-  } catch (err) {
-    console.error('Error en disponibilidad-completa:', err);
-    res.status(500).json({ error: "Error al obtener datos del médico" });
-  }
-});
-
 // Obtener médico por ID
 router.get("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
+    validarID(id);
 
     const medicos = await query(
       `
@@ -183,14 +123,60 @@ router.get("/:id", async (req, res) => {
       return res.status(404).json({ error: "Médico no encontrado" });
     }
 
-    res.json(medicos[0]);
+    const medico = medicos[0];
+    medico.foto_perfil = convertirBufferAImagen(medico.foto_perfil);
+    res.json(medico);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Error al obtener médico" });
+    console.error("❌ Error al obtener médico:", err);
+    res.status(err.status || 500).json({ error: err.message || "Error al obtener médico" });
   }
 });
 
-// Registrar nuevo médico
+// Obtener disponibilidad completa del médico
+router.get("/:id/disponibilidad-completa", async (req, res) => {
+  try {
+    const { id } = req.params;
+    validarID(id);
+
+    const existe = await query("SELECT id FROM medico WHERE id = ?", [id]);
+    if (existe.length === 0) return res.status(404).json({ error: "Médico no encontrado" });
+
+    const [medicoData, horarios, citas] = await Promise.all([
+      query(`
+        SELECT m.*, u.nombre, u.apellido, u.correo, u.foto_perfil 
+        FROM medico m 
+        JOIN usuarios u ON m.id_usuario = u.id 
+        WHERE m.id = ?
+      `, [id]),
+      query(`
+        SELECT * FROM horarios 
+        WHERE id_medico = ? AND activo = TRUE AND fecha_fin > NOW() 
+        ORDER BY fecha_inicio ASC
+        LIMIT 100
+      `, [id]),
+      query(`
+        SELECT c.* 
+        FROM citas c
+        WHERE c.id_medico = ? AND c.fecha > NOW()
+        ORDER BY c.fecha DESC
+      `, [id]),
+    ]);
+
+    const medico = medicoData[0];
+    medico.foto_perfil = convertirBufferAImagen(medico.foto_perfil);
+
+    res.json({
+      medico,
+      horarios: horarios.map(parsearHorario),
+      citas,
+    });
+  } catch (err) {
+    console.error("❌ Error en disponibilidad-completa:", err);
+    res.status(500).json({ error: "Error al obtener datos del médico" });
+  }
+});
+
+// Registrar médico
 router.post("/", async (req, res) => {
   try {
     const {
@@ -216,7 +202,6 @@ router.post("/", async (req, res) => {
       ["nombre", "apellidos", "correo", "contrasena", "cedula", "fechaNacimiento", "tipoSangre", "numeroRegistro"]
     );
 
-    // Verificar duplicados
     const usuarioExistente = await query(
       "SELECT id FROM usuarios WHERE correo = ? OR numero_documento = ?",
       [correo, cedula]
@@ -225,21 +210,18 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "El correo o la cédula ya está registrado" });
     }
 
-    // Procesar imagen base64
     let fotoBuffer = null;
     if (foto_perfil) {
       try {
         const base64Data = foto_perfil.split(";base64,").pop();
         fotoBuffer = Buffer.from(base64Data, "base64");
-      } catch (error) {
-        console.warn("⚠️ Error procesando imagen:", error.message);
+      } catch (e) {
+        console.warn("⚠️ Error procesando imagen:", e.message);
       }
     }
 
     let idUsuario;
-
     await transaction(async (connection) => {
-      // Crear usuario
       const resultUsuario = await new Promise((resolve, reject) => {
         connection.query(
           `INSERT INTO usuarios 
@@ -263,7 +245,6 @@ router.post("/", async (req, res) => {
 
       idUsuario = resultUsuario.insertId;
 
-      // Crear médico asociado
       await new Promise((resolve, reject) => {
         connection.query(
           `INSERT INTO medico (id_usuario, especialidad, anios_experiencia, numeroRegistro, rethus, universidad, direccion_consultorio)
@@ -290,14 +271,9 @@ router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const { especialidad, anios_experiencia, tarifa } = req.body;
 
-    if (!id || isNaN(id)) {
-      return res.status(400).json({ error: "ID inválido" });
-    }
-
-    const medicoExistente = await query("SELECT id FROM medico WHERE id = ?", [id]);
-    if (medicoExistente.length === 0) {
-      return res.status(404).json({ error: "Médico no encontrado" });
-    }
+    validarID(id);
+    const medico = await query("SELECT id FROM medico WHERE id = ?", [id]);
+    if (medico.length === 0) return res.status(404).json({ error: "Médico no encontrado" });
 
     await query(
       "UPDATE medico SET especialidad = ?, anios_experiencia = ?, tarifa = ? WHERE id = ?",
@@ -306,7 +282,7 @@ router.put("/:id", async (req, res) => {
 
     res.json({ message: "Médico actualizado correctamente" });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Error al actualizar médico:", err);
     res.status(500).json({ error: "Error al actualizar médico" });
   }
 });
