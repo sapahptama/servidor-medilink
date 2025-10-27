@@ -14,7 +14,7 @@ router.get('/chat/:chatId', async (req, res) => {
         u.apellido
       FROM mensajes m
       JOIN usuarios u ON m.id_emisor = u.id
-      WHERE m.id_chat = $1
+      WHERE m.id_chat = ?
       ORDER BY m.created_at ASC`,
       [chatId]
     );
@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
     // Insertar mensaje
     const mensajeResult = await client.query(
       `INSERT INTO mensajes (id_chat, id_emisor, tipo_emisor, contenido)
-       VALUES ($1, $2, $3, $4)
+       VALUES (?, $2, $3, $4)
        RETURNING *`,
       [id_chat, id_emisor, tipo_emisor, contenido]
     );
@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
     
     // Obtener info del emisor
     const usuarioResult = await client.query(
-      'SELECT nombre, apellido FROM usuarios WHERE id = $1',
+      'SELECT nombre, apellido FROM usuarios WHERE id = ?',
       [id_emisor]
     );
     
@@ -62,7 +62,7 @@ router.post('/', async (req, res) => {
     
     await client.query(
       `UPDATE chats 
-       SET ultimo_mensaje = $1,
+       SET ultimo_mensaje = ?,
            fecha_ultimo_mensaje = CURRENT_TIMESTAMP,
            ${campoNoLeidos} = ${campoNoLeidos} + 1
        WHERE id = $2`,

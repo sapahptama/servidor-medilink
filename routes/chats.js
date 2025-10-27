@@ -20,7 +20,7 @@ router.get('/usuario/:userId/tipo/:tipo', async (req, res) => {
         FROM chats c
         JOIN medicos m ON c.id_medico = m.id
         LEFT JOIN especialidades e ON m.id_especialidad = e.id
-        WHERE c.id_paciente = $1
+        WHERE c.id_paciente = ?
         ORDER BY c.fecha_ultimo_mensaje DESC
       `;
     } else {
@@ -34,7 +34,7 @@ router.get('/usuario/:userId/tipo/:tipo', async (req, res) => {
         FROM chats c
         JOIN pacientes p ON c.id_paciente = p.id_paciente
         JOIN usuarios u ON p.id_usuario = u.id
-        WHERE c.id_medico = $1
+        WHERE c.id_medico = ?
         ORDER BY c.fecha_ultimo_mensaje DESC
       `;
     }
@@ -54,7 +54,7 @@ router.post('/obtener-o-crear', async (req, res) => {
   try {
     // Verificar si existe el chat
     let result = await pool.query(
-      'SELECT * FROM chats WHERE id_paciente = $1 AND id_medico = $2',
+      'SELECT * FROM chats WHERE id_paciente = ? AND id_medico = $2',
       [id_paciente, id_medico]
     );
     
@@ -65,7 +65,7 @@ router.post('/obtener-o-crear', async (req, res) => {
     // Crear nuevo chat
     result = await pool.query(
       `INSERT INTO chats (id_paciente, id_medico) 
-       VALUES ($1, $2) 
+       VALUES (?, $2) 
        RETURNING *`,
       [id_paciente, id_medico]
     );
@@ -88,7 +88,7 @@ router.put('/:chatId/marcar-leidos/:tipoUsuario', async (req, res) => {
       : 'no_leidos_medico';
     
     await pool.query(
-      `UPDATE chats SET ${campo} = 0 WHERE id = $1`,
+      `UPDATE chats SET ${campo} = 0 WHERE id = ?`,
       [chatId]
     );
     
@@ -96,7 +96,7 @@ router.put('/:chatId/marcar-leidos/:tipoUsuario', async (req, res) => {
     await pool.query(
       `UPDATE mensajes 
        SET leido = true 
-       WHERE id_chat = $1 AND tipo_emisor != $2`,
+       WHERE id_chat = ? AND tipo_emisor != $2`,
       [chatId, tipoUsuario]
     );
     
