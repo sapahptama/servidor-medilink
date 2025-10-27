@@ -100,10 +100,13 @@ io.on('connection', (socket) => {
   });
 });
 
+// Si estamos en desarrollo, iniciar el servidor normalmente
+if (process.env.NODE_ENV !== 'production') {
+  server.listen(app.get('port'), () => {
+    console.log(`🚀 Servidor HTTP corriendo en puerto ${app.get('port')}`);
+    console.log(`🔌 WebSocket listo para conexiones`);
+  });
+}
 
-server.listen(app.get('port'), () => {
-  console.log(`🚀 Servidor HTTP corriendo en puerto ${app.get('port')}`);
-  console.log(`🔌 WebSocket listo para conexiones`);
-});
-
-module.exports = { app, io };
+// Exportar el servidor para entornos de despliegue
+module.exports = server;
