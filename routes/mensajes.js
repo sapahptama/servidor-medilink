@@ -38,7 +38,7 @@ router.post('/', async (req, res) => {
     // Insertar mensaje
     const mensajeResult = await client.query(
       `INSERT INTO mensajes (id_chat, id_emisor, tipo_emisor, contenido)
-       VALUES (?, $2, $3, $4)
+       VALUES (?, ?, ?, ?)
        RETURNING *`,
       [id_chat, id_emisor, tipo_emisor, contenido]
     );
@@ -65,7 +65,7 @@ router.post('/', async (req, res) => {
        SET ultimo_mensaje = ?,
            fecha_ultimo_mensaje = CURRENT_TIMESTAMP,
            ${campoNoLeidos} = ${campoNoLeidos} + 1
-       WHERE id = $2`,
+       WHERE id = ?`,
       [contenido, id_chat]
     );
     

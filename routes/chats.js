@@ -55,7 +55,7 @@ router.post('/obtener-o-crear', async (req, res) => {
   try {
     // Verificar si existe el chat
     let result = await pool.query(
-      'SELECT * FROM chats WHERE id_paciente = ? AND id_medico = $2',
+      'SELECT * FROM chats WHERE id_paciente = ? AND id_medico = ?',
       [id_paciente, id_medico]
     );
     
@@ -66,7 +66,7 @@ router.post('/obtener-o-crear', async (req, res) => {
     // Crear nuevo chat
     result = await pool.query(
       `INSERT INTO chats (id_paciente, id_medico) 
-       VALUES (?, $2) 
+       VALUES (?, ?) 
        RETURNING *`,
       [id_paciente, id_medico]
     );
@@ -97,7 +97,7 @@ router.put('/:chatId/marcar-leidos/:tipoUsuario', async (req, res) => {
     await pool.query(
       `UPDATE mensajes 
        SET leido = true 
-       WHERE id_chat = ? AND tipo_emisor != $2`,
+       WHERE id_chat = ? AND tipo_emisor != ?`,
       [chatId, tipoUsuario]
     );
     
