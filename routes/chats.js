@@ -18,7 +18,7 @@ router.get('/usuario/:userId/tipo/:tipo', async (req, res) => {
           m.apellido as medico_apellido,
           e.nombre as especialidad
         FROM chats c
-        JOIN medicos m ON c.id_medico = m.id
+        JOIN medico m ON c.id_medico = m.id
         LEFT JOIN especialidades e ON m.id_especialidad = e.id
         WHERE c.id_paciente = ?
         ORDER BY c.fecha_ultimo_mensaje DESC
