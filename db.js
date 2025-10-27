@@ -5,12 +5,12 @@ const pool = mysql.createPool({
   user: 'ukmfzr4gmjpysakg',
   password: 'MAh9m7dtxiDiZVaQtXsq',
   database: 'b6y6cwxy5myxhxr0kncl',
-  connectionLimit: 3,
+  connectionLimit: 2, // 🎯 Reducido de 3 a 2 para respetar el límite de 5 conexiones del servidor.
   acquireTimeout: 30000,
   timeout: 60000,
   multipleStatements: false,
   waitForConnections: true,
-  queueLimit: 5,
+  queueLimit: 20, // ⬆️ Aumentado de 5 a 20 para que las solicitudes esperen en lugar de fallar inmediatamente.
   connectTimeout: 10000,
   charset: 'utf8mb4',
   timezone: 'local',
@@ -42,6 +42,7 @@ const query = (sql, args = []) => {
         console.error('Params:', args);
         return reject(err);
       }
+      // El pool.query() se encarga de adquirir y liberar la conexión automáticamente
       resolve(results);
     });
   });
