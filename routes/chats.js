@@ -32,7 +32,7 @@ router.get('/usuario/:userId/tipo/:tipo', async (req, res) => {
           u.nombre as paciente_nombre,
           u.apellido as paciente_apellido
         FROM chats c
-        JOIN pacientes p ON c.id_paciente = p.id_paciente
+        JOIN pacientes p ON c.id_paciente = p.id
         JOIN usuarios u ON p.id_usuario = u.id
         WHERE c.id_medico = ?
         ORDER BY c.fecha_ultimo_mensaje DESC
